@@ -10,6 +10,16 @@
 			"label": "init_git_powershell",
 			"type": "shell",
 			"command": "git init; git add .; git commit -m \"Initial commit\""
+		},
+		{
+			"label": "git_commit_fix",
+			"type": "shell",
+			"command": "git add . && git commit -m \"Fix: Replace javax.annotation with jakarta.annotation for Spring Boot 3 compatibility\""
+		},
+		{
+			"label": "git_commit_fix_ps",
+			"type": "shell",
+			"command": "git add .; git commit -m \"Fix: Replace javax.annotation with jakarta.annotation\""
 		}
 	]
 }
