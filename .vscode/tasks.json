@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "init_git",
+			"type": "shell",
+			"command": "git init && git add . && git commit -m \"Initial commit\""
+		},
+		{
+			"label": "init_git_powershell",
+			"type": "shell",
+			"command": "git init; git add .; git commit -m \"Initial commit\""
+		}
+	]
+}
