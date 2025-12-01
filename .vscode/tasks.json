@@ -20,6 +20,16 @@
 			"label": "git_commit_fix_ps",
 			"type": "shell",
 			"command": "git add .; git commit -m \"Fix: Replace javax.annotation with jakarta.annotation\""
+		},
+		{
+			"label": "git_commit_simple",
+			"type": "shell",
+			"command": "git commit -m \"Fix_imports\""
+		},
+		{
+			"label": "git_commit_fix_scheduler",
+			"type": "shell",
+			"command": "git commit -a -m \"Fix_compilation_error_in_SchedulerService\""
 		}
 	]
 }

@@ -326,7 +326,7 @@ public class SchedulerService {
 
             if (info.getWaitTimeRemaining() <= 0) {
                 // 时间片耗尽，触发调度检查
-                log.info("Time slice expired for Room {}", roomId);
+                log.info("Time slice expired for Room {}", info.getRoomId());
                 // 尝试获取服务
                 // 逻辑: 检查是否有服务对象可以被替换 (同级且服务时间最长)
                 checkTimeSliceAllocation(info);
