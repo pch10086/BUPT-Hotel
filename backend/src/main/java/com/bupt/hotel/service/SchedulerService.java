@@ -304,6 +304,7 @@ public class SchedulerService {
     // 假设 10s 真实时间 = 1min 逻辑时间
     // 为了平滑，我们每 1s 执行一次，每次推进 6s 逻辑时间 (1/10 min)
     @Scheduled(fixedRate = 1000)
+    @Transactional
     public void tick() {
         // 1. 更新服务队列中的房间 (温度、费用)
         serviceQueue.forEach((roomId, unit) -> {
@@ -393,6 +394,10 @@ public class SchedulerService {
         // 费用 = 温度变化量 * 1
         double feeIncrement = tempChange * 1.0;
         unit.setCurrentFee(unit.getCurrentFee() + feeIncrement);
+
+        // 格式化保留2位小数
+        room.setCurrentTemp(Math.round(room.getCurrentTemp() * 100.0) / 100.0);
+        room.setTotalFee(Math.round((room.getTotalFee() == null ? 0 : room.getTotalFee()) * 100.0) / 100.0);
 
         roomRepository.save(room);
         // MQTT 推送实时状态

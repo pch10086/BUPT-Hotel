@@ -14,9 +14,9 @@
 
 ## 🛠 技术栈
 
-- **后端**: Java 21, Spring Boot 3.2.0, Spring Data JPA, Spring Integration MQTT
+- **后端**: Java 17+, Spring Boot 3.2.0, Spring Data JPA, Spring Integration MQTT
 - **前端**: Vue.js 3, Vite, Element Plus, Axios
-- **数据库**: MySQL 8.0+
+- **数据库**: H2 Database (内存数据库，无需安装)
 - **消息中间件**: MQTT (默认使用公共 Broker `broker.emqx.io`，可配置本地)
 
 ## 📂 目录结构
@@ -47,33 +47,20 @@ BUPT-Hotel/
 
 - JDK 17 或更高版本
 - Node.js 16.0 或更高版本
-- MySQL 8.0 数据库
 - Maven 3.6+
 
-### 2. 数据库设置
-
-1.  登录 MySQL 数据库。
-2.  执行 `database/schema.sql` 脚本。
-    - 该脚本会创建 `bupt_hotel` 数据库。
-    - 创建 `room`, `billing_record`, `billing_detail`, `lodging_bill` 表。
-    - 插入 5 个测试房间的初始数据（101-105 号房）。
-
-### 3. 后端启动
+### 2. 后端启动 (无需配置数据库)
 
 1.  进入 `backend` 目录。
-2.  打开 `src/main/resources/application.properties`，修改数据库连接信息：
-    ```properties
-    spring.datasource.username=root
-    spring.datasource.password=你的密码
-    ```
-3.  使用 Maven 运行项目：
+2.  使用 Maven 运行项目：
     ```bash
     mvn spring-boot:run
     ```
     或者在 IDE (IntelliJ IDEA / Eclipse) 中运行 `HotelApplication.java`。
-4.  后端默认运行在 `http://localhost:8080`。
+3.  后端默认运行在 `http://localhost:8080`。
+    - (可选) 访问 H2 控制台查看数据: `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:bupt_hotel`, 用户名: `sa`, 密码留空)
 
-### 4. 前端启动
+### 3. 前端启动
 
 1.  进入 `frontend` 目录。
 2.  安装依赖：

@@ -47,4 +47,10 @@ public class Room {
 
     @Column(name = "total_fee")
     private Double totalFee;
+
+    @Column(name = "customer_name")
+    private String customerName;
+
+    @Column(name = "id_card")
+    private String idCard;
 }
