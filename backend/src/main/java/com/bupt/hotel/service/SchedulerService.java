@@ -181,7 +181,7 @@ public class SchedulerService {
                 })
                 .collect(Collectors.toList());
 
-        ServiceUnit candidateToPreempt = sortedServiceUnits.get(0); // 优先级最低且服务时间最长的
+        ServiceUnit candidateToPreempt = sortedServiceUnits.getFirst(); // 优先级最低且服务时间最长的
 
         int newPriority = getPriority(newFanSpeed);
         int candidatePriority = getPriority(candidateToPreempt.getFanSpeed());
@@ -461,7 +461,7 @@ public class SchedulerService {
                 .collect(Collectors.toList());
 
         if (!sameSpeedUnits.isEmpty()) {
-            ServiceUnit toReplace = sameSpeedUnits.get(0);
+            ServiceUnit toReplace = sameSpeedUnits.getFirst();
             // 替换
             log.info("Time slice swap: {} replaces {}", waiter.getRoomId(), toReplace.getRoomId());
             preempt(toReplace.getRoomId(), waiter.getRoomId(), waiter.getFanSpeed());
