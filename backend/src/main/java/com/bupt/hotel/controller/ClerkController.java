@@ -3,7 +3,10 @@ package com.bupt.hotel.controller;
 import com.bupt.hotel.entity.BillingDetail;
 import com.bupt.hotel.entity.BillingRecord;
 import com.bupt.hotel.entity.LodgingBill;
+import com.bupt.hotel.entity.Room;
+import com.bupt.hotel.repository.RoomRepository;
 import com.bupt.hotel.service.BillingService;
+import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,6 +15,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/clerk")
 public class ClerkController {
+
+    @Autowired
+    private BillingService billingService;
 
     @Autowired
     private RoomRepository roomRepository;
