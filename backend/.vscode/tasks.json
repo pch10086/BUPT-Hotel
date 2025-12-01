@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "run_tests_manual",
+			"type": "shell",
+			"command": "mvn test"
+		},
+		{
+			"label": "mvn_test_manual",
+			"type": "shell",
+			"command": "mvn clean test"
+		}
+	]
+}
