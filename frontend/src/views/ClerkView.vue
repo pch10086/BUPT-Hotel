@@ -69,6 +69,13 @@
                     style="width: 100%"
                     >生成账单</el-button
                   >
+                  <el-button
+                    type="primary"
+                    @click="handleExport"
+                    style="width: 100%; margin-top: 10px; margin-left: 0;"
+                    :disabled="!acBill && !lodgingBill"
+                    >导出账单文件</el-button
+                  >
                 </el-form>
               </el-card>
             </el-col>
@@ -226,6 +233,32 @@ const handleCheckout = async () => {
     ElMessage.success("账单生成成功");
   } catch (e) {
     ElMessage.error("结账失败");
+  }
+};
+
+const handleExport = async () => {
+  if (!checkoutRoomId.value) return;
+  try {
+    // 直接下载文件
+    const response = await api.get("/clerk/export", {
+      params: { roomId: checkoutRoomId.value },
+      responseType: 'blob' // 重要：指定响应类型为 blob
+    });
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `bill_${checkoutRoomId.value}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    ElMessage.success("导出成功");
+  } catch (e) {
+    console.error(e);
+    ElMessage.error("导出失败");
   }
 };
 

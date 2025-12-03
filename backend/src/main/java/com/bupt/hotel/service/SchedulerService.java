@@ -81,6 +81,17 @@ public class SchedulerService {
     public synchronized void requestSupply(String roomId, Mode mode, Double targetTemp, FanSpeed fanSpeed) {
         log.info("Request Supply: Room={}, Mode={}, Target={}, Fan={}", roomId, mode, targetTemp, fanSpeed);
 
+        // 参数校验
+        if (mode == Mode.COOL) {
+            if (targetTemp < 18 || targetTemp > 28) {
+                throw new IllegalArgumentException("Cooling target temp must be between 18 and 28");
+            }
+        } else if (mode == Mode.HEAT) {
+            if (targetTemp < 18 || targetTemp > 25) {
+                throw new IllegalArgumentException("Heating target temp must be between 18 and 25");
+            }
+        }
+
         // 更新或保存请求信息
         RequestInfo req = new RequestInfo();
         req.setRoomId(roomId);

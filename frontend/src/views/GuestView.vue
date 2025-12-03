@@ -1,228 +1,284 @@
 <template>
   <div class="guest-container">
-    <el-card class="control-panel" shadow="hover">
-      <template #header>
-        <div class="panel-header">
-          <div class="room-info">
-            <el-icon :size="24"><House /></el-icon>
-            <span class="room-number">Room {{ roomId }}</span>
-          </div>
-          <el-tag :type="room.isOn ? 'success' : 'info'" effect="dark" round>
-            {{ room.isOn ? "运行中" : "已关机" }}
-          </el-tag>
-        </div>
-      </template>
+    <div class="header">
+      <h2>客房空调控制模拟</h2>
+      <el-tag type="info">多房间监控模式</el-tag>
+    </div>
 
-      <!-- 关机状态 -->
-      <div v-if="!room.isOn" class="off-state">
-        <el-empty description="空调已关闭">
-          <el-form label-width="80px" class="init-form">
-            <el-form-item label="房间号">
-              <el-select
-                v-model="roomId"
-                placeholder="选择房间"
-                @change="fetchStatus"
-              >
-                <el-option label="101" value="101" />
-                <el-option label="102" value="102" />
-                <el-option label="103" value="103" />
-                <el-option label="104" value="104" />
-                <el-option label="105" value="105" />
-              </el-select>
-            </el-form-item>
+    <div class="rooms-grid">
+      <el-card
+        v-for="room in sortedRooms"
+        :key="room.roomId"
+        class="room-card"
+        :class="{ 'is-on': room.isOn }"
+        shadow="hover"
+      >
+        <template #header>
+          <div class="card-header">
+            <div class="room-title">
+              <el-icon><House /></el-icon>
+              <span>{{ room.roomId }}</span>
+            </div>
+            <el-tag
+              :type="room.isOn ? 'success' : 'info'"
+              effect="dark"
+              size="small"
+              round
+            >
+              {{ room.isOn ? "运行中" : "已关机" }}
+            </el-tag>
+          </div>
+        </template>
+
+        <!-- 关机状态：开机面板 -->
+        <div v-if="!room.isOn" class="control-body off-state">
+          <div class="status-placeholder">
+            <el-icon :size="40" color="#909399"><SwitchButton /></el-icon>
+            <p>空调已关闭</p>
+          </div>
+          
+          <el-form size="small" label-position="top">
             <el-form-item label="模式">
-              <el-radio-group v-model="mode">
+              <el-radio-group 
+                v-model="getControl(room.roomId).mode" 
+                size="small"
+                @change="(val) => handleModeChange(room.roomId, val)"
+              >
                 <el-radio-button label="COOL">制冷</el-radio-button>
                 <el-radio-button label="HEAT">制热</el-radio-button>
               </el-radio-group>
             </el-form-item>
-            <el-form-item label="目标温度">
-              <el-input-number v-model="targetTemp" :min="18" :max="28" />
-            </el-form-item>
-            <el-form-item label="风速">
-              <el-radio-group v-model="fanSpeed">
-                <el-radio-button label="HIGH">高</el-radio-button>
-                <el-radio-button label="MIDDLE">中</el-radio-button>
-                <el-radio-button label="LOW">低</el-radio-button>
-              </el-radio-group>
-            </el-form-item>
+            
+            <el-row :gutter="10">
+              <el-col :span="12">
+                <el-form-item label="温度">
+                  <el-input-number 
+                    v-model="getControl(room.roomId).targetTemp" 
+                    :min="getControl(room.roomId).mode === 'COOL' ? 18 : 18" 
+                    :max="getControl(room.roomId).mode === 'COOL' ? 28 : 25" 
+                    controls-position="right"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="风速">
+                  <el-select v-model="getControl(room.roomId).fanSpeed" style="width: 100%">
+                    <el-option label="高" value="HIGH" />
+                    <el-option label="中" value="MIDDLE" />
+                    <el-option label="低" value="LOW" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
             <el-button
               type="primary"
-              size="large"
-              class="power-btn"
-              @click="powerOn"
+              class="action-btn"
+              @click="powerOn(room.roomId)"
               :icon="SwitchButton"
             >
               开启空调
             </el-button>
           </el-form>
-        </el-empty>
-      </div>
-
-      <!-- 开机状态 -->
-      <div v-else class="on-state">
-        <div class="dashboard">
-          <div class="metric-card">
-            <div class="label">当前温度</div>
-            <div class="value temp">
-              {{ room.currentTemp?.toFixed(2) }}<small>℃</small>
-            </div>
-          </div>
-          <div class="metric-card">
-            <div class="label">当前费用</div>
-            <div class="value fee">¥{{ room.totalFee?.toFixed(2) }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="label">运行状态</div>
-            <div class="value status">
-              <el-tag :type="getStatusType(room.status)">{{
-                formatStatus(room.status)
-              }}</el-tag>
-            </div>
-          </div>
         </div>
 
-        <el-divider content-position="center">控制面板</el-divider>
+        <!-- 开机状态：监控与控制 -->
+        <div v-else class="control-body on-state">
+          <div class="metrics">
+            <div class="metric-item">
+              <div class="m-label">室温</div>
+              <div class="m-value temp">{{ room.currentTemp?.toFixed(1) }}℃</div>
+            </div>
+            <div class="metric-item">
+              <div class="m-label">费用</div>
+              <div class="m-value fee">¥{{ room.totalFee?.toFixed(1) }}</div>
+            </div>
+            <div class="metric-item">
+              <div class="m-label">状态</div>
+              <el-tag size="small" :type="getStatusType(room.status)">
+                {{ formatStatus(room.status) }}
+              </el-tag>
+            </div>
+          </div>
 
-        <el-form label-position="top">
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="调节温度">
-                <el-input-number
-                  v-model="room.targetTemp"
-                  :min="18"
-                  :max="28"
-                  @change="updateState"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="调节风速">
-                <el-radio-group
-                  v-model="room.fanSpeed"
-                  @change="updateState"
-                  size="small"
-                >
-                  <el-radio-button label="HIGH">高</el-radio-button>
-                  <el-radio-button label="MIDDLE">中</el-radio-button>
-                  <el-radio-button label="LOW">低</el-radio-button>
-                </el-radio-group>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-button
-            type="danger"
-            class="power-btn"
-            @click="powerOff"
-            :icon="SwitchButton"
-            plain
-          >
-            关闭空调
-          </el-button>
-        </el-form>
-      </div>
-    </el-card>
+          <el-divider style="margin: 12px 0" />
+
+          <el-form size="small" label-position="top">
+             <el-row :gutter="10">
+              <el-col :span="12">
+                <el-form-item label="目标温度">
+                  <el-input-number 
+                    v-model="room.targetTemp" 
+                    :min="room.mode === 'COOL' ? 18 : 18" 
+                    :max="room.mode === 'COOL' ? 28 : 25" 
+                    controls-position="right"
+                    style="width: 100%"
+                    @change="(val) => updateState(room.roomId, val, room.fanSpeed)"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="风速">
+                  <el-select 
+                    v-model="room.fanSpeed" 
+                    style="width: 100%"
+                    @change="(val) => updateState(room.roomId, room.targetTemp, val)"
+                  >
+                    <el-option label="高" value="HIGH" />
+                    <el-option label="中" value="MIDDLE" />
+                    <el-option label="低" value="LOW" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            
+            <el-button
+              type="danger"
+              plain
+              class="action-btn"
+              @click="powerOff(room.roomId)"
+              :icon="SwitchButton"
+            >
+              关闭空调
+            </el-button>
+          </el-form>
+        </div>
+      </el-card>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import api from "@/api";
 import { ElMessage } from "element-plus";
 import { House, SwitchButton } from "@element-plus/icons-vue";
 
-const roomId = ref("101");
-const mode = ref("COOL");
-const targetTemp = ref(25);
-const fanSpeed = ref("MIDDLE");
-const room = ref({ isOn: false });
+const rooms = ref([]);
+const localControls = ref({}); // 存储每个房间的表单状态 { roomId: { mode, targetTemp, fanSpeed } }
 let timer = null;
 
-// 获取最新状态
+// 简单的防抖函数实现
+function debounce(fn, delay) {
+  let timeoutId;
+  return function (...args) {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      fn.apply(this, args);
+    }, delay);
+  };
+}
+
+// 确保房间按ID排序
+const sortedRooms = computed(() => {
+  return [...rooms.value].sort((a, b) => a.roomId.localeCompare(b.roomId));
+});
+
+// 获取或初始化本地控制状态
+const getControl = (roomId) => {
+  if (!localControls.value[roomId]) {
+    localControls.value[roomId] = {
+      mode: 'COOL',
+      targetTemp: 25,
+      fanSpeed: 'MIDDLE'
+    };
+  }
+  return localControls.value[roomId];
+};
+
+// 处理模式切换，自动设置缺省值
+const handleModeChange = (roomId, mode) => {
+  const control = getControl(roomId);
+  if (mode === 'COOL') {
+    control.targetTemp = 25;
+    control.fanSpeed = 'MIDDLE';
+  } else if (mode === 'HEAT') {
+    control.targetTemp = 22;
+    control.fanSpeed = 'MIDDLE';
+  }
+};
+
 const fetchStatus = async () => {
   try {
-    const res = await api.get("/guest/status", {
-      params: { roomId: roomId.value },
-    });
-    const data = res.data;
-    room.value = data;
-
-    // 如果房间是开机状态，同步本地控制参数
-    if (data.isOn) {
-      mode.value = data.mode;
-      targetTemp.value = data.targetTemp;
-      fanSpeed.value = data.fanSpeed;
-    }
+    // 使用管理员接口获取所有房间状态，效率更高
+    const res = await api.get("/manager/rooms");
+    rooms.value = res.data;
   } catch (e) {
-    console.error(e);
+    console.error("Fetch status failed", e);
   }
 };
 
-const powerOn = async () => {
+const powerOn = async (roomId) => {
+  const control = getControl(roomId);
   try {
-    const res = await api.post("/guest/powerOn", {
-      roomId: roomId.value,
-      mode: mode.value,
-      targetTemp: targetTemp.value,
-      fanSpeed: fanSpeed.value,
+    await api.post("/guest/powerOn", {
+      roomId: roomId,
+      mode: control.mode,
+      targetTemp: control.targetTemp,
+      fanSpeed: control.fanSpeed,
     });
-    room.value = res.data;
-    ElMessage.success("空调已开启");
+    ElMessage.success(`${roomId} 开机成功`);
+    fetchStatus(); // 立即刷新
   } catch (e) {
-    ElMessage.error("开机失败");
+    ElMessage.error("开机失败: " + (e.response?.data?.message || e.message));
   }
 };
 
-const powerOff = async () => {
+const powerOff = async (roomId) => {
   try {
     await api.post("/guest/powerOff", null, {
-      params: { roomId: roomId.value },
+      params: { roomId: roomId },
     });
-    room.value.isOn = false;
-    ElMessage.success("空调已关闭");
+    ElMessage.success(`${roomId} 关机成功`);
+    fetchStatus();
   } catch (e) {
     ElMessage.error("关机失败");
   }
 };
 
-const updateState = async () => {
+// 防抖更新状态
+const debouncedUpdate = debounce(async (roomId, targetTemp, fanSpeed) => {
   try {
     await api.post("/guest/changeState", {
-      roomId: roomId.value,
-      targetTemp: room.value.targetTemp,
-      fanSpeed: room.value.fanSpeed,
+      roomId: roomId,
+      targetTemp: targetTemp,
+      fanSpeed: fanSpeed,
     });
     ElMessage.success("设置已更新");
   } catch (e) {
-    ElMessage.error("更新失败");
+    ElMessage.error("更新失败: " + (e.response?.data?.message || e.message));
   }
+}, 1000);
+
+const updateState = (roomId, targetTemp, fanSpeed) => {
+  debouncedUpdate(roomId, targetTemp, fanSpeed);
 };
 
 const getStatusType = (status) => {
-  switch (status) {
-    case "SERVING":
-      return "success";
-    case "WAITING":
-      return "warning";
-    case "IDLE":
-      return "info";
-    default:
-      return "";
-  }
+  const map = {
+    SERVING: "success",
+    WAITING: "warning",
+    IDLE: "info",
+    SHUTDOWN: "danger"
+  };
+  return map[status] || "";
 };
 
 const formatStatus = (status) => {
   const map = {
-    SERVING: "送风中",
-    WAITING: "等待中",
-    IDLE: "待机(回温)",
+    SERVING: "送风",
+    WAITING: "等待",
+    IDLE: "待机",
     SHUTDOWN: "关机",
   };
   return map[status] || status;
 };
 
 onMounted(() => {
-  fetchStatus(); // 初始化时立即获取一次状态
+  fetchStatus();
   timer = setInterval(fetchStatus, 1000);
 });
 
@@ -233,81 +289,84 @@ onUnmounted(() => {
 
 <style scoped>
 .guest-container {
-  display: flex;
-  justify-content: center;
-  padding: 40px 20px;
+  padding: 20px;
   background-color: #f5f7fa;
   min-height: calc(100vh - 60px);
 }
 
-.control-panel {
-  width: 100%;
-  max-width: 480px;
-  border-radius: 12px;
+.header {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
-.panel-header {
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.room-card {
+  transition: all 0.3s;
+  border-radius: 8px;
+}
+
+.room-card.is-on {
+  border-top: 3px solid #67c23a;
+}
+
+.card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.room-info {
+.room-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 18px;
+  gap: 6px;
   font-weight: bold;
-  color: #303133;
+  font-size: 16px;
 }
 
-.dashboard {
+.control-body {
+  padding: 10px 0;
+}
+
+.status-placeholder {
+  text-align: center;
+  color: #909399;
+  margin-bottom: 20px;
+}
+
+.metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-  margin-bottom: 25px;
-}
-
-.metric-card {
+  gap: 10px;
   text-align: center;
-  background: #f0f9eb;
-  padding: 15px 5px;
-  border-radius: 8px;
+  background-color: #f9fafc;
+  padding: 10px;
+  border-radius: 6px;
 }
 
-.metric-card:nth-child(2) {
-  background: #ecf5ff;
-}
-
-.metric-card:nth-child(3) {
-  background: #fdf6ec;
-}
-
-.label {
+.m-label {
   font-size: 12px;
   color: #909399;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
-.value {
-  font-size: 18px;
+.m-value {
   font-weight: bold;
+  font-size: 16px;
   color: #303133;
 }
 
-.value.temp {
-  color: #67c23a;
-}
-.value.fee {
-  color: #409eff;
-}
+.m-value.temp { color: #67c23a; }
+.m-value.fee { color: #409eff; }
 
-.power-btn {
+.action-btn {
   width: 100%;
-  margin-top: 20px;
-}
-
-.init-form {
-  margin-top: 20px;
+  margin-top: 10px;
 }
 </style>

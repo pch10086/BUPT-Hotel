@@ -101,12 +101,82 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 统计报表 -->
+    <el-card class="report-card" style="margin-top: 30px">
+      <template #header>
+        <div class="card-header">
+          <span>统计报表</span>
+        </div>
+      </template>
+
+      <div class="report-controls">
+        <el-date-picker
+          v-model="dateRange"
+          type="datetimerange"
+          range-separator="至"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
+          value-format="YYYY-MM-DDTHH:mm:ss"
+          style="margin-right: 15px"
+        />
+        <el-button
+          type="primary"
+          @click="generateReport"
+          :loading="loadingReport"
+          >生成报表</el-button
+        >
+      </div>
+
+      <div v-if="reportData" class="report-content" style="margin-top: 20px">
+        <!-- 摘要数据 -->
+        <el-descriptions title="报表摘要" border>
+          <el-descriptions-item label="总费用"
+            >¥{{ reportData.totalFee }}</el-descriptions-item
+          >
+          <el-descriptions-item label="总服务时长"
+            >{{ reportData.totalDurationSeconds }} 秒</el-descriptions-item
+          >
+          <el-descriptions-item label="总服务次数"
+            >{{ reportData.totalServiceCount }} 次</el-descriptions-item
+          >
+        </el-descriptions>
+
+        <el-row :gutter="20" style="margin-top: 20px">
+          <el-col :span="12">
+            <h4>各房间费用排名</h4>
+            <el-table
+              :data="formatRanking(reportData.roomFeeRanking)"
+              border
+              stripe
+              height="250"
+            >
+              <el-table-column prop="roomId" label="房间号" />
+              <el-table-column prop="fee" label="费用 (¥)" />
+            </el-table>
+          </el-col>
+          <el-col :span="12">
+            <h4>风速使用时长统计</h4>
+            <el-table
+              :data="formatFanStats(reportData.fanSpeedUsageDuration)"
+              border
+              stripe
+              height="250"
+            >
+              <el-table-column prop="speed" label="风速" />
+              <el-table-column prop="duration" label="时长 (秒)" />
+            </el-table>
+          </el-col>
+        </el-row>
+      </div>
+    </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
 import api from "@/api";
+import { ElMessage } from "element-plus";
 
 const rooms = ref([]);
 const serviceQueue = ref({});
@@ -114,6 +184,11 @@ const waitingQueue = ref({});
 const currentTime = ref(new Date().toLocaleTimeString());
 let timer = null;
 let clockTimer = null;
+
+// 报表相关
+const dateRange = ref([]);
+const loadingReport = ref(false);
+const reportData = ref(null);
 
 const fetchData = async () => {
   try {
@@ -166,6 +241,45 @@ const formatStatus = (status) => {
 const timeFormatter = (row) => {
   if (!row.startTime) return "-";
   return new Date(row.startTime).toLocaleTimeString();
+};
+
+// 报表相关方法
+const generateReport = async () => {
+  if (!dateRange.value || dateRange.value.length !== 2) {
+    ElMessage.warning("请选择时间范围");
+    return;
+  }
+
+  loadingReport.value = true;
+  try {
+    const res = await api.get("/manager/report", {
+      params: {
+        start: dateRange.value[0],
+        end: dateRange.value[1],
+      },
+    });
+    reportData.value = res.data;
+    ElMessage.success("报表生成成功");
+  } catch (e) {
+    console.error(e);
+    ElMessage.error("报表生成失败");
+  } finally {
+    loadingReport.value = false;
+  }
+};
+
+const formatRanking = (rankingMap) => {
+  if (!rankingMap) return [];
+  return Object.entries(rankingMap).map(([roomId, fee]) => ({ roomId, fee }));
+};
+
+const formatFanStats = (statsMap) => {
+  if (!statsMap) return [];
+  const map = { HIGH: "高风", MIDDLE: "中风", LOW: "低风" };
+  return Object.entries(statsMap).map(([speed, duration]) => ({
+    speed: map[speed] || speed,
+    duration,
+  }));
 };
 
 onMounted(() => {

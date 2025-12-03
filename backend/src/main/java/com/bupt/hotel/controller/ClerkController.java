@@ -8,8 +8,12 @@ import com.bupt.hotel.repository.RoomRepository;
 import com.bupt.hotel.service.BillingService;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -55,5 +59,16 @@ public class ClerkController {
     @GetMapping("/details")
     public List<BillingDetail> getDetails(@RequestParam String roomId) {
         return billingService.getDetails(roomId);
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> exportBill(@RequestParam String roomId) {
+        String content = billingService.exportBillAndDetail(roomId);
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=bill_" + roomId + ".txt")
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(bytes);
     }
 }
