@@ -67,8 +67,8 @@ public class ClerkController {
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=bill_" + roomId + ".txt")
-                .contentType(MediaType.TEXT_PLAIN)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=bill_" + roomId + ".csv")
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .body(bytes);
     }
 }

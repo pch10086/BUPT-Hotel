@@ -73,7 +73,7 @@
                     type="primary"
                     @click="handleExport"
                     style="width: 100%; margin-top: 10px; margin-left: 0;"
-                    :disabled="!acBill && !lodgingBill"
+                    :disabled="!checkoutRoomId"
                     >导出账单文件</el-button
                   >
                 </el-form>
@@ -135,9 +135,21 @@
                 >
                   <el-table-column label="空调详单">
                     <el-table-column
+                      prop="requestTime"
+                      label="请求时间"
+                      :formatter="requestTimeFormatter"
+                      width="160"
+                    />
+                    <el-table-column
                       prop="startTime"
                       label="开始时间"
                       :formatter="timeFormatter"
+                      width="160"
+                    />
+                    <el-table-column
+                      prop="endTime"
+                      label="结束时间"
+                      :formatter="endTimeFormatter"
                       width="160"
                     />
                     <el-table-column
@@ -173,7 +185,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from "vue";
+import { ref, reactive, watch } from "vue";
 import api from "@/api";
 import { ElMessage } from "element-plus";
 
@@ -184,6 +196,23 @@ const checkInForm = reactive({
   roomId: "",
   customerName: "",
   idCard: "",
+});
+
+// 监听房间号变化，重置账单数据
+watch(() => checkInForm.roomId, () => {
+    // 入住表单不需要重置什么
+});
+
+// 结账相关
+const checkoutRoomId = ref("");
+const acBill = ref(null);
+const lodgingBill = ref(null);
+const details = ref([]);
+
+watch(checkoutRoomId, () => {
+  acBill.value = null;
+  lodgingBill.value = null;
+  details.value = [];
 });
 
 const handleCheckIn = async () => {
@@ -205,12 +234,6 @@ const handleCheckIn = async () => {
     loading.value = false;
   }
 };
-
-// 结账相关
-const checkoutRoomId = ref("");
-const acBill = ref(null);
-const lodgingBill = ref(null);
-const details = ref([]);
 
 const handleCheckout = async () => {
   if (!checkoutRoomId.value) return;
@@ -238,6 +261,14 @@ const handleCheckout = async () => {
 
 const handleExport = async () => {
   if (!checkoutRoomId.value) return;
+
+  // 如果尚未生成账单，先尝试生成
+  if (!acBill.value && !lodgingBill.value) {
+    await handleCheckout();
+    // 如果生成后仍然没有数据，说明失败或无账单，终止导出
+    if (!acBill.value && !lodgingBill.value) return;
+  }
+
   try {
     // 直接下载文件
     const response = await api.get("/clerk/export", {
@@ -249,7 +280,7 @@ const handleExport = async () => {
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `bill_${checkoutRoomId.value}.txt`);
+    link.setAttribute('download', `bill_${checkoutRoomId.value}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -267,8 +298,16 @@ const formatDate = (val) => {
   return new Date(val).toLocaleString();
 };
 
+const requestTimeFormatter = (row) => {
+  return row.requestTime ? new Date(row.requestTime).toLocaleString() : "";
+};
+
 const timeFormatter = (row) => {
-  return new Date(row.startTime).toLocaleTimeString();
+  return row.startTime ? new Date(row.startTime).toLocaleString() : "";
+};
+
+const endTimeFormatter = (row) => {
+  return row.endTime ? new Date(row.endTime).toLocaleString() : "";
 };
 </script>
 

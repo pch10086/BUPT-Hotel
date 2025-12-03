@@ -75,6 +75,11 @@ public class BillingService {
 
     public String exportBillAndDetail(String roomId) {
         StringBuilder sb = new StringBuilder();
+        // 添加 BOM 以支持 Excel 打开 UTF-8 CSV
+        sb.append('\uFEFF');
+
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter
+                .ofPattern("yyyy-MM-dd HH:mm:ss");
 
         // 1. 获取数据
         List<BillingRecord> records = billingRecordRepository.findByRoomId(roomId);
@@ -87,34 +92,51 @@ public class BillingService {
 
         List<BillingDetail> details = billingDetailRepository.findByRoomId(roomId);
 
-        // 2. 拼接文本 (TXT格式)
-        sb.append("========== 酒店账单 ==========\n");
-        sb.append("房间号: ").append(roomId).append("\n");
+        // 2. 拼接 CSV 格式
+        sb.append("=== 酒店账单 ===\n");
+        sb.append("房间号,入住时间,退房时间,入住天数,住宿费用,空调总费用,总计费用\n");
+
+        double lodgingFee = lodgingBill != null ? lodgingBill.getTotalLodgingFee() : 0.0;
+        double acFee = acBill != null ? acBill.getTotalAcFee() : 0.0;
+        double totalFee = lodgingFee + acFee;
+
+        String checkIn = "";
+        String checkOut = "";
+        String days = "0";
+
         if (lodgingBill != null) {
-            sb.append("入住时间: ").append(lodgingBill.getCheckInTime()).append("\n");
-            sb.append("退房时间: ").append(lodgingBill.getCheckOutTime()).append("\n");
-            sb.append("入住天数: ").append(lodgingBill.getDays()).append("\n");
-            sb.append("住宿费用: ").append(lodgingBill.getTotalLodgingFee()).append("\n");
+            checkIn = lodgingBill.getCheckInTime().format(formatter);
+            checkOut = lodgingBill.getCheckOutTime().format(formatter);
+            days = String.valueOf(lodgingBill.getDays());
+        } else if (acBill != null) {
+            checkIn = acBill.getCheckInTime().format(formatter);
+            checkOut = acBill.getCheckOutTime().format(formatter);
         }
-        if (acBill != null) {
-            sb.append("空调总费用: ").append(acBill.getTotalAcFee()).append("\n");
-        }
-        sb.append("------------------------------\n");
-        sb.append("总计费用: ").append(
-                (lodgingBill != null ? lodgingBill.getTotalLodgingFee() : 0) +
-                        (acBill != null ? acBill.getTotalAcFee() : 0))
-                .append("\n");
+
+        sb.append(roomId).append(",")
+                .append("=\"").append(checkIn).append("\",")
+                .append("=\"").append(checkOut).append("\",")
+                .append(days).append(",")
+                .append(String.format("%.2f", lodgingFee)).append(",")
+                .append(String.format("%.2f", acFee)).append(",")
+                .append(String.format("%.2f", totalFee)).append("\n");
         sb.append("\n");
 
-        sb.append("========== 空调详单 ==========\n");
-        sb.append(String.format("%-20s %-10s %-10s %-10s %-10s\n", "开始时间", "时长(s)", "风速", "费用", "累积"));
+        sb.append("=== 空调详单 ===\n");
+        sb.append("房间号,请求时间,服务开始时间,服务结束时间,服务时长(s),风速,当前费用,累积费用\n");
         for (BillingDetail d : details) {
-            sb.append(String.format("%-20s %-10d %-10s %-10.2f %-10.2f\n",
-                    d.getStartTime().toString().replace("T", " "),
-                    d.getDuration(),
-                    d.getFanSpeed(),
-                    d.getFee(),
-                    d.getCumulativeFee()));
+            String reqTime = d.getRequestTime() != null ? d.getRequestTime().format(formatter) : "";
+            String startTime = d.getStartTime() != null ? d.getStartTime().format(formatter) : "";
+            String endTime = d.getEndTime() != null ? d.getEndTime().format(formatter) : "";
+
+            sb.append(d.getRoomId()).append(",")
+                    .append("=\"").append(reqTime).append("\",")
+                    .append("=\"").append(startTime).append("\",")
+                    .append("=\"").append(endTime).append("\",")
+                    .append(d.getDuration()).append(",")
+                    .append(d.getFanSpeed()).append(",")
+                    .append(String.format("%.2f", d.getFee())).append(",")
+                    .append(String.format("%.2f", d.getCumulativeFee())).append("\n");
         }
 
         return sb.toString();
