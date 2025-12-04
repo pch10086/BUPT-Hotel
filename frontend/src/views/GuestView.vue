@@ -335,6 +335,9 @@ onUnmounted(() => {
   overflow: hidden;
   background: #ffffff;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
 }
 
 .room-card:hover {
@@ -345,6 +348,12 @@ onUnmounted(() => {
 .room-card.is-on {
   border-top: 4px solid #67c23a;
   box-shadow: 0 4px 16px rgba(103, 194, 58, 0.2);
+}
+
+:deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .card-header {
@@ -377,6 +386,10 @@ onUnmounted(() => {
 
 .control-body {
   padding: 16px 0;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .status-placeholder {
@@ -384,6 +397,11 @@ onUnmounted(() => {
   color: #909399;
   margin-bottom: 24px;
   padding: 20px;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .status-placeholder .el-icon {
@@ -404,6 +422,8 @@ onUnmounted(() => {
   padding: 16px;
   border-radius: 10px;
   margin-bottom: 8px;
+  min-height: 100px;
+  flex-shrink: 0;
 }
 
 .metric-item {
