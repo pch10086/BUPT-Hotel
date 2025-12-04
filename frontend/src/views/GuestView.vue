@@ -5,7 +5,14 @@
       <el-tag type="info">多房间监控模式</el-tag>
     </div>
 
-    <div class="rooms-grid">
+    <!-- 如果没有已入住的房间，显示提示 -->
+    <el-empty 
+      v-if="sortedRooms.length === 0" 
+      description="暂无已入住的房间，请先在前台办理入住"
+      :image-size="120"
+    />
+    
+    <div v-else class="rooms-grid">
       <el-card
         v-for="room in sortedRooms"
         :key="room.roomId"
@@ -18,6 +25,7 @@
             <div class="room-title">
               <el-icon><House /></el-icon>
               <span>{{ room.roomId }}</span>
+              <span v-if="room.customerName" class="customer-name">({{ room.customerName }})</span>
             </div>
             <el-tag
               :type="room.isOn ? 'success' : 'info'"
@@ -95,6 +103,12 @@
               <div class="m-value fee">¥{{ room.totalFee?.toFixed(1) }}</div>
             </div>
             <div class="metric-item">
+              <div class="m-label">模式</div>
+              <el-tag size="small" :type="room.mode === 'COOL' ? 'info' : 'warning'">
+                {{ room.mode === 'COOL' ? '制冷' : '制热' }}
+              </el-tag>
+            </div>
+            <div class="metric-item">
               <div class="m-label">状态</div>
               <el-tag size="small" :type="getStatusType(room.status)">
                 {{ formatStatus(room.status) }}
@@ -159,9 +173,11 @@ const rooms = ref([]);
 const localControls = ref({}); // 存储每个房间的表单状态 { roomId: { mode, targetTemp, fanSpeed } }
 let timer = null;
 
-// 确保房间按ID排序
+// 只显示已办理入住的房间（有customerName的房间），并按ID排序
 const sortedRooms = computed(() => {
-  return [...rooms.value].sort((a, b) => a.roomId.localeCompare(b.roomId));
+  return [...rooms.value]
+    .filter(room => room.customerName) // 只显示已入住的房间
+    .sort((a, b) => a.roomId.localeCompare(b.roomId));
 });
 
 // 获取或初始化本地控制状态
@@ -322,6 +338,13 @@ onUnmounted(() => {
   font-size: 16px;
 }
 
+.customer-name {
+  font-size: 12px;
+  font-weight: normal;
+  color: #909399;
+  margin-left: 4px;
+}
+
 .control-body {
   padding: 10px 0;
 }
@@ -334,7 +357,7 @@ onUnmounted(() => {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   text-align: center;
   background-color: #f9fafc;

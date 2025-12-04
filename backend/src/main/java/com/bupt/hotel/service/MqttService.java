@@ -123,6 +123,12 @@ public class MqttService {
         if (room == null)
             return;
 
+        // 验证：只有已入住的房间才能开机
+        if (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty()) {
+            log.warn("MQTT: Room {} is not checked in, cannot power on", cmd.getRoomId());
+            return;
+        }
+
         room.setIsOn(true);
         // checkInTime is managed by Clerk
         // room.setCheckInTime(LocalDateTime.now());
@@ -147,6 +153,12 @@ public class MqttService {
         Room room = roomRepository.findByRoomId(cmd.getRoomId()).orElse(null);
         if (room == null || !room.getIsOn())
             return;
+
+        // 验证：只有已入住的房间才能调整状态
+        if (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty()) {
+            log.warn("MQTT: Room {} is not checked in, cannot change state", cmd.getRoomId());
+            return;
+        }
 
         schedulerService.requestSupply(cmd.getRoomId(), room.getMode(), cmd.getTargetTemp(), cmd.getFanSpeed());
     }

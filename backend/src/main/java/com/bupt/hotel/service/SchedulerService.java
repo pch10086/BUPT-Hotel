@@ -335,9 +335,29 @@ public class SchedulerService {
         double logicMinutesPassed = logicSecondsPassed / 60.0;
 
         // 1. 更新服务队列中的房间 (温度、费用)
-        serviceQueue.forEach((roomId, unit) -> {
+        // 使用迭代器以安全删除
+        Iterator<Map.Entry<String, ServiceUnit>> serviceIt = serviceQueue.entrySet().iterator();
+        while (serviceIt.hasNext()) {
+            Map.Entry<String, ServiceUnit> entry = serviceIt.next();
+            String roomId = entry.getKey();
+            ServiceUnit unit = entry.getValue();
+            
+            // 安全检查：如果房间未入住，自动停止服务
+            Room room = roomRepository.findByRoomId(roomId).orElse(null);
+            if (room != null && (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty())) {
+                log.warn("Room {} is not checked in, stopping service", roomId);
+                serviceIt.remove();
+                // 生成详单并更新房间状态
+                createBillingDetail(unit);
+                room.setStatus(RoomStatus.SHUTDOWN);
+                room.setIsOn(false);
+                roomRepository.save(room);
+                mqttService.publishStatus(roomId, room);
+                continue;
+            }
+            
             updateRoomState(roomId, unit, logicSecondsPassed, logicMinutesPassed);
-        });
+        }
 
         // 2. 更新等待队列 (倒计时)
         // 使用迭代器以安全删除
@@ -345,6 +365,15 @@ public class SchedulerService {
         while (waitIt.hasNext()) {
             Map.Entry<String, WaitingInfo> entry = waitIt.next();
             WaitingInfo info = entry.getValue();
+
+            // 安全检查：如果房间未入住，从等待队列移除
+            Room room = roomRepository.findByRoomId(info.getRoomId()).orElse(null);
+            if (room != null && (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty())) {
+                log.warn("Room {} is not checked in, removing from waiting queue", info.getRoomId());
+                waitIt.remove();
+                updateRoomStatus(info.getRoomId(), RoomStatus.SHUTDOWN);
+                continue;
+            }
 
             info.setWaitTimeRemaining(info.getWaitTimeRemaining() - logicSecondsPassed);
 

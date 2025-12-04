@@ -42,6 +42,12 @@ public class GuestController {
     @PostMapping("/powerOn")
     public Room powerOn(@RequestBody PowerOnRequest req) {
         Room room = roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
+        
+        // 验证：只有已入住的房间才能开机
+        if (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty()) {
+            throw new RuntimeException("房间未办理入住，无法开机");
+        }
+        
         room.setIsOn(true);
         // checkInTime should be set by ClerkController.checkIn
         // room.setCheckInTime(LocalDateTime.now());
@@ -65,6 +71,12 @@ public class GuestController {
     @PostMapping("/changeState")
     public Room changeState(@RequestBody ControlRequest req) {
         Room room = roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
+        
+        // 验证：只有已入住的房间才能调整状态
+        if (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty()) {
+            throw new RuntimeException("房间未办理入住，无法调整状态");
+        }
+        
         if (!room.getIsOn()) {
             throw new RuntimeException("Room is OFF");
         }
