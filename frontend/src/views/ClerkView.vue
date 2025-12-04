@@ -308,23 +308,117 @@ const endTimeFormatter = (row) => {
 
 <style scoped>
 .clerk-container {
-  padding: 20px;
-  background-color: #f5f7fa;
+  padding: 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: calc(100vh - 60px);
 }
+
 .main-tabs {
   min-height: 500px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.98);
 }
+
 .tab-content {
-  padding: 20px;
+  padding: 30px;
+  background: #ffffff;
 }
+
 .checkin-form {
   max-width: 500px;
   margin: 0 auto;
+  padding: 30px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
+
 .price {
   color: #f56c6c;
-  font-weight: bold;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+:deep(.el-tabs__header) {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  margin: 0;
+  padding: 0 20px;
+}
+
+:deep(.el-tabs__item) {
+  font-weight: 500;
+  font-size: 15px;
+  padding: 0 30px;
+  height: 50px;
+  line-height: 50px;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: #667eea;
+  font-weight: 600;
+}
+
+:deep(.el-tabs__active-bar) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  height: 3px;
+}
+
+:deep(.el-card) {
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
+}
+
+:deep(.el-card:hover) {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+:deep(.el-card__header) {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-bottom: 1px solid #ebeef5;
+  padding: 16px 20px;
+  font-weight: 600;
   font-size: 16px;
+}
+
+:deep(.el-button) {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+
+:deep(.el-button:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
+
+:deep(.el-descriptions) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.el-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.el-table th) {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  font-weight: 600;
+  color: #303133;
+}
+
+.bill-preview {
+  padding: 20px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-radius: 12px;
 }
 </style>

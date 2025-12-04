@@ -298,8 +298,8 @@ onUnmounted(() => {
 
 <style scoped>
 .manager-container {
-  padding: 20px;
-  background-color: #f0f2f5;
+  padding: 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: calc(100vh - 60px);
 }
 
@@ -307,61 +307,142 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 30px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.header h2 {
+  margin: 0;
+  color: #303133;
+  font-size: 26px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.room-grid {
+  margin-bottom: 30px;
 }
 
 .room-card {
   margin-bottom: 20px;
-  transition: all 0.3s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .room-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .room-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
-  font-weight: bold;
-  font-size: 16px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 18px;
+  color: #303133;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
-  margin-bottom: 5px;
+  font-size: 14px;
+  margin-bottom: 8px;
   color: #606266;
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.info-row:last-child {
+  border-bottom: none;
 }
 
 .val {
-  font-weight: 500;
+  font-weight: 600;
   color: #303133;
+  font-size: 15px;
 }
 
 .val.fee {
   color: #f56c6c;
+  font-size: 16px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.queue-card {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s;
+}
+
+.queue-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+
+.report-card {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.report-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 /* 状态边框颜色 */
 .status-serving {
-  border-top: 3px solid #67c23a;
+  border-top: 4px solid #67c23a;
+  box-shadow: 0 2px 12px rgba(103, 194, 58, 0.15);
 }
+
 .status-waiting {
-  border-top: 3px solid #e6a23c;
+  border-top: 4px solid #e6a23c;
+  box-shadow: 0 2px 12px rgba(230, 162, 60, 0.15);
 }
+
 .status-idle {
-  border-top: 3px solid #909399;
+  border-top: 4px solid #909399;
+  box-shadow: 0 2px 12px rgba(144, 147, 153, 0.15);
 }
+
 .status-shutdown {
-  border-top: 3px solid #f56c6c;
+  border-top: 4px solid #f56c6c;
+  box-shadow: 0 2px 12px rgba(245, 108, 108, 0.15);
+}
+
+:deep(.el-card__header) {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-bottom: 1px solid #ebeef5;
+  padding: 16px 20px;
+}
+
+:deep(.el-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.el-table th) {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  font-weight: 600;
+  color: #303133;
 }
 </style>

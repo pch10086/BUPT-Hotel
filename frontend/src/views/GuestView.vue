@@ -297,91 +297,175 @@ onUnmounted(() => {
 
 <style scoped>
 .guest-container {
-  padding: 20px;
-  background-color: #f5f7fa;
+  padding: 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: calc(100vh - 60px);
 }
 
 .header {
-  margin-bottom: 20px;
+  margin-bottom: 30px;
   display: flex;
   align-items: center;
   gap: 15px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.header h2 {
+  margin: 0;
+  color: #303133;
+  font-size: 24px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .rooms-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
 }
 
 .room-card {
-  transition: all 0.3s;
-  border-radius: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.room-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .room-card.is-on {
-  border-top: 3px solid #67c23a;
+  border-top: 4px solid #67c23a;
+  box-shadow: 0 4px 16px rgba(103, 194, 58, 0.2);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 4px 0;
 }
 
 .room-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: bold;
-  font-size: 16px;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 18px;
+  color: #303133;
+}
+
+.room-title .el-icon {
+  color: #667eea;
+  font-size: 20px;
 }
 
 .customer-name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: normal;
   color: #909399;
-  margin-left: 4px;
+  margin-left: 6px;
 }
 
 .control-body {
-  padding: 10px 0;
+  padding: 16px 0;
 }
 
 .status-placeholder {
   text-align: center;
   color: #909399;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  padding: 20px;
+}
+
+.status-placeholder .el-icon {
+  margin-bottom: 12px;
+}
+
+.status-placeholder p {
+  margin: 0;
+  font-size: 14px;
 }
 
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 12px;
   text-align: center;
-  background-color: #f9fafc;
-  padding: 10px;
-  border-radius: 6px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 16px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.metric-item {
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.metric-item:hover {
+  background: rgba(255, 255, 255, 1);
+  transform: scale(1.05);
 }
 
 .m-label {
   font-size: 12px;
-  color: #909399;
-  margin-bottom: 4px;
+  color: #606266;
+  margin-bottom: 6px;
+  font-weight: 500;
 }
 
 .m-value {
-  font-weight: bold;
-  font-size: 16px;
+  font-weight: 700;
+  font-size: 18px;
   color: #303133;
+  line-height: 1.2;
 }
 
-.m-value.temp { color: #67c23a; }
-.m-value.fee { color: #409eff; }
+.m-value.temp { 
+  color: #67c23a;
+  font-size: 20px;
+}
+
+.m-value.fee { 
+  color: #409eff;
+  font-size: 20px;
+}
 
 .action-btn {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 16px;
+  height: 42px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
+
+:deep(.el-card__header) {
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-bottom: 1px solid #ebeef5;
+  padding: 16px 20px;
 }
 </style>
