@@ -1,7 +1,7 @@
 <template>
   <div class="manager-container">
     <div class="header">
-      <h2>酒店中央空调监控系统</h2>
+      <h2>酒店空调监控系统</h2>
       <el-tag type="info">{{ currentTime }}</el-tag>
     </div>
 

@@ -1,5 +1,10 @@
 <template>
   <div class="clerk-container">
+    <div class="header">
+      <h2>前台服务系统</h2>
+      <el-tag type="info">{{ currentTime }}</el-tag>
+    </div>
+    
     <el-tabs type="border-card" class="main-tabs">
       <!-- 入住办理 -->
       <el-tab-pane label="入住办理">
@@ -185,11 +190,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from "vue";
+import { ref, reactive, watch, onMounted, onUnmounted } from "vue";
 import api from "@/api";
 import { ElMessage } from "element-plus";
 
 const loading = ref(false);
+const currentTime = ref(new Date().toLocaleTimeString());
+let clockTimer = null;
 
 // 入住相关
 const checkInForm = reactive({
@@ -304,6 +311,16 @@ const timeFormatter = (row) => {
 const endTimeFormatter = (row) => {
   return row.endTime ? new Date(row.endTime).toLocaleString() : "";
 };
+
+onMounted(() => {
+  clockTimer = setInterval(() => {
+    currentTime.value = new Date().toLocaleTimeString();
+  }, 1000);
+});
+
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer);
+});
 </script>
 
 <style scoped>
@@ -311,6 +328,28 @@ const endTimeFormatter = (row) => {
   padding: 30px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: calc(100vh - 60px);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.header h2 {
+  margin: 0;
+  color: #303133;
+  font-size: 26px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .main-tabs {

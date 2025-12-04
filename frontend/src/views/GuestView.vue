@@ -1,8 +1,7 @@
 <template>
   <div class="guest-container">
     <div class="header">
-      <h2>客房空调控制模拟</h2>
-      <el-tag type="info">多房间监控模式</el-tag>
+      <h2>客房空调控制系统</h2>
     </div>
 
     <!-- 如果没有已入住的房间，显示提示 -->
