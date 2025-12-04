@@ -4,7 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "dev:server": "vite --mode server",
+    "dev:client": "vite --mode client",
     "build": "vite build",
+    "build:server": "vite build --mode server",
+    "build:client": "vite build --mode client",
     "preview": "vite preview"
   },
   "dependencies": {

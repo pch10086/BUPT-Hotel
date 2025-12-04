@@ -5,6 +5,7 @@ import GuestView from '../views/GuestView.vue'
 import ClerkView from '../views/ClerkView.vue'
 import ManagerView from '../views/ManagerView.vue'
 import { useAuthStore } from '../stores/auth'
+import { getAllowedRoutes } from '../config/env'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -76,6 +77,15 @@ router.beforeEach((to, from, next) => {
       }
       ElMessage.warning('您没有权限访问该页面')
       next(routes[user?.role] || '/login')
+      return
+    }
+
+    // 检查当前模式是否允许访问该路由
+    const allowedRoutes = getAllowedRoutes()
+    if (!allowedRoutes.includes(to.path)) {
+      ElMessage.warning('当前模式不允许访问该页面')
+      // 跳转到第一个允许的路由
+      next(allowedRoutes[0] || '/login')
       return
     }
   }

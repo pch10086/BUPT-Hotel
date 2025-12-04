@@ -21,19 +21,31 @@
             size="large"
             @change="handleRoleChange"
           >
-            <el-option label="客户" value="guest">
+            <el-option 
+              v-if="allowedRoles.includes('guest')"
+              label="客户" 
+              value="guest"
+            >
               <div style="display: flex; align-items: center; gap: 8px">
                 <el-icon><User /></el-icon>
                 <span>客户</span>
               </div>
             </el-option>
-            <el-option label="前台" value="clerk">
+            <el-option 
+              v-if="allowedRoles.includes('clerk')"
+              label="前台" 
+              value="clerk"
+            >
               <div style="display: flex; align-items: center; gap: 8px">
                 <el-icon><Service /></el-icon>
                 <span>前台</span>
               </div>
             </el-option>
-            <el-option label="经理" value="manager">
+            <el-option 
+              v-if="allowedRoles.includes('manager')"
+              label="经理" 
+              value="manager"
+            >
               <div style="display: flex; align-items: center; gap: 8px">
                 <el-icon><Monitor /></el-icon>
                 <span>经理</span>
@@ -96,10 +108,12 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { User, Service, Monitor, Lock } from "@element-plus/icons-vue";
 import { useAuthStore } from "@/stores/auth";
+import { getAllowedRoles } from "@/config/env";
 
 const router = useRouter();
 const loginFormRef = ref(null);
 const loading = ref(false);
+const allowedRoles = ref(getAllowedRoles());
 
 const loginForm = reactive({
   role: "",
