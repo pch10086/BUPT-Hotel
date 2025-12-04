@@ -198,11 +198,6 @@ const checkInForm = reactive({
   idCard: "",
 });
 
-// 监听房间号变化，重置账单数据
-watch(() => checkInForm.roomId, () => {
-    // 入住表单不需要重置什么
-});
-
 // 结账相关
 const checkoutRoomId = ref("");
 const acBill = ref(null);

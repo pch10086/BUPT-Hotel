@@ -1,28 +1,22 @@
 package com.bupt.hotel.service;
 
 import com.bupt.hotel.entity.BillingDetail;
-import com.bupt.hotel.entity.BillingRecord;
 import com.bupt.hotel.entity.FanSpeed;
 import com.bupt.hotel.repository.BillingDetailRepository;
-import com.bupt.hotel.repository.BillingRecordRepository;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.List;
 
 @Service
 public class ReportService {
 
     @Autowired
     private BillingDetailRepository billingDetailRepository;
-
-    @Autowired
-    private BillingRecordRepository billingRecordRepository;
 
     @Data
     public static class GlobalReport {
@@ -35,7 +29,6 @@ public class ReportService {
 
     public GlobalReport generateGlobalReport(LocalDateTime start, LocalDateTime end) {
         List<BillingDetail> details = billingDetailRepository.findByStartTimeBetween(start, end);
-        List<BillingRecord> records = billingRecordRepository.findByCheckInTimeBetween(start, end);
 
         GlobalReport report = new GlobalReport();
 

@@ -159,19 +159,6 @@ const rooms = ref([]);
 const localControls = ref({}); // 存储每个房间的表单状态 { roomId: { mode, targetTemp, fanSpeed } }
 let timer = null;
 
-// 简单的防抖函数实现
-function debounce(fn, delay) {
-  let timeoutId;
-  return function (...args) {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    timeoutId = setTimeout(() => {
-      fn.apply(this, args);
-    }, delay);
-  };
-}
-
 // 确保房间按ID排序
 const sortedRooms = computed(() => {
   return [...rooms.value].sort((a, b) => a.roomId.localeCompare(b.roomId));
@@ -239,22 +226,27 @@ const powerOff = async (roomId) => {
   }
 };
 
-// 防抖更新状态
-const debouncedUpdate = debounce(async (roomId, targetTemp, fanSpeed) => {
-  try {
-    await api.post("/guest/changeState", {
-      roomId: roomId,
-      targetTemp: targetTemp,
-      fanSpeed: fanSpeed,
-    });
-    ElMessage.success("设置已更新");
-  } catch (e) {
-    ElMessage.error("更新失败: " + (e.response?.data?.message || e.message));
-  }
-}, 1000);
+const timeoutMap = {};
 
+// 针对每个房间的防抖更新
 const updateState = (roomId, targetTemp, fanSpeed) => {
-  debouncedUpdate(roomId, targetTemp, fanSpeed);
+  if (timeoutMap[roomId]) {
+    clearTimeout(timeoutMap[roomId]);
+  }
+  
+  timeoutMap[roomId] = setTimeout(async () => {
+    try {
+      await api.post("/guest/changeState", {
+        roomId: roomId,
+        targetTemp: targetTemp,
+        fanSpeed: fanSpeed,
+      });
+      ElMessage.success(`房间 ${roomId} 设置已更新`);
+    } catch (e) {
+      ElMessage.error(`房间 ${roomId} 更新失败: ` + (e.response?.data?.message || e.message));
+    }
+    delete timeoutMap[roomId];
+  }, 1000);
 };
 
 const getStatusType = (status) => {

@@ -6,6 +6,7 @@ import com.bupt.hotel.entity.LodgingBill;
 import com.bupt.hotel.entity.Room;
 import com.bupt.hotel.repository.RoomRepository;
 import com.bupt.hotel.service.BillingService;
+import com.bupt.hotel.service.TimeService;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -26,6 +27,9 @@ public class ClerkController {
     @Autowired
     private RoomRepository roomRepository;
 
+    @Autowired
+    private TimeService timeService;
+
     @Data
     public static class CheckInRequest {
         private String roomId;
@@ -38,7 +42,7 @@ public class ClerkController {
         Room room = roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
         room.setCustomerName(req.getCustomerName());
         room.setIdCard(req.getIdCard());
-        room.setCheckInTime(java.time.LocalDateTime.now());
+        room.setCheckInTime(timeService.getCurrentTime());
         room.setTotalFee(0.0);
         // 重置空调状态
         room.setIsOn(false);

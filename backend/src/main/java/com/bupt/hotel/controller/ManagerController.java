@@ -2,8 +2,6 @@ package com.bupt.hotel.controller;
 
 import com.bupt.hotel.entity.Room;
 import com.bupt.hotel.repository.RoomRepository;
-import com.bupt.hotel.entity.Room;
-import com.bupt.hotel.repository.RoomRepository;
 import com.bupt.hotel.service.ReportService;
 import com.bupt.hotel.service.SchedulerService;
 import org.springframework.beans.factory.annotation.Autowired;

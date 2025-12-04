@@ -7,7 +7,12 @@ import com.bupt.hotel.repository.RoomRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,7 +21,6 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -120,7 +124,8 @@ public class MqttService {
             return;
 
         room.setIsOn(true);
-        room.setCheckInTime(LocalDateTime.now());
+        // checkInTime is managed by Clerk
+        // room.setCheckInTime(LocalDateTime.now());
         room.setTotalFee(0.0);
         roomRepository.save(room);
 

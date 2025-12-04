@@ -23,6 +23,8 @@ public class BillingService {
     private BillingDetailRepository billingDetailRepository;
     @Autowired
     private LodgingBillRepository lodgingBillRepository;
+    @Autowired
+    private TimeService timeService;
 
     @Transactional
     public BillingRecord generateAcBill(String roomId) {
@@ -31,9 +33,9 @@ public class BillingService {
         BillingRecord record = new BillingRecord();
         record.setRoomId(roomId);
         record.setCheckInTime(room.getCheckInTime());
-        record.setCheckOutTime(LocalDateTime.now());
+        record.setCheckOutTime(timeService.getCurrentTime());
         record.setTotalAcFee(room.getTotalFee());
-        record.setCreatedAt(LocalDateTime.now());
+        record.setCreatedAt(timeService.getCurrentTime());
 
         BillingRecord saved = billingRecordRepository.save(record);
 
@@ -50,7 +52,7 @@ public class BillingService {
     @Transactional
     public LodgingBill generateLodgingBill(String roomId) {
         Room room = roomRepository.findByRoomId(roomId).orElseThrow();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = timeService.getCurrentTime();
 
         LodgingBill bill = new LodgingBill();
         bill.setRoomId(roomId);

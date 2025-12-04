@@ -1,13 +1,18 @@
 package com.bupt.hotel.controller;
 
-import com.bupt.hotel.entity.*;
+import com.bupt.hotel.entity.FanSpeed;
+import com.bupt.hotel.entity.Mode;
+import com.bupt.hotel.entity.Room;
 import com.bupt.hotel.repository.RoomRepository;
 import com.bupt.hotel.service.SchedulerService;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/guest")
@@ -38,7 +43,8 @@ public class GuestController {
     public Room powerOn(@RequestBody PowerOnRequest req) {
         Room room = roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
         room.setIsOn(true);
-        room.setCheckInTime(LocalDateTime.now());
+        // checkInTime should be set by ClerkController.checkIn
+        // room.setCheckInTime(LocalDateTime.now());
         room.setTotalFee(0.0);
         roomRepository.save(room);
 

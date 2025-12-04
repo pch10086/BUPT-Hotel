@@ -1,6 +1,10 @@
 package com.bupt.hotel.service;
 
-import com.bupt.hotel.entity.*;
+import com.bupt.hotel.entity.BillingDetail;
+import com.bupt.hotel.entity.FanSpeed;
+import com.bupt.hotel.entity.Mode;
+import com.bupt.hotel.entity.Room;
+import com.bupt.hotel.entity.RoomStatus;
 import com.bupt.hotel.repository.BillingDetailRepository;
 import com.bupt.hotel.repository.RoomRepository;
 import lombok.Data;
@@ -13,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -29,6 +35,9 @@ public class SchedulerService {
 
     @Autowired
     private MqttService mqttService;
+
+    @Autowired
+    private TimeService timeService;
 
     @Value("${hotel.ac.max-service-units}")
     private int maxServiceUnits;
@@ -219,7 +228,7 @@ public class SchedulerService {
 
         ServiceUnit unit = new ServiceUnit();
         unit.setRoomId(roomId);
-        unit.setStartTime(LocalDateTime.now());
+        unit.setStartTime(timeService.getCurrentTime());
         unit.setFanSpeed(fanSpeed);
         unit.setServedDurationSeconds(0);
         unit.setCurrentFee(0.0);
@@ -279,7 +288,7 @@ public class SchedulerService {
         detail.setRoomId(unit.getRoomId());
         detail.setRequestTime(unit.getStartTime()); // 简化: 请求时间约等于开始时间
         detail.setStartTime(unit.getStartTime());
-        detail.setEndTime(LocalDateTime.now());
+        detail.setEndTime(timeService.getCurrentTime());
 
         long duration = Duration.between(detail.getStartTime(), detail.getEndTime()).getSeconds();
         detail.setDuration(duration);
@@ -312,14 +321,19 @@ public class SchedulerService {
     // --- 定时任务: 模拟时间流逝、温度变化、计费、时间片检查 ---
 
     // 每 1 秒执行一次 (模拟逻辑时间推进)
-    // 假设 10s 真实时间 = 1min 逻辑时间
-    // 为了平滑，我们每 1s 执行一次，每次推进 6s 逻辑时间 (1/10 min)
     @Scheduled(fixedRate = 1000)
     @Transactional
     public void tick() {
+        // 计算逻辑时间流逝
+        // timeScaleMs: 多少毫秒真实时间 = 1分钟逻辑时间 (默认10000ms = 10s)
+        // 1s real = (60 / (timeScaleMs / 1000.0)) logic seconds
+        double scaleFactor = 60.0 / (timeScaleMs / 1000.0);
+        long logicSecondsPassed = (long) scaleFactor;
+        double logicMinutesPassed = logicSecondsPassed / 60.0;
+
         // 1. 更新服务队列中的房间 (温度、费用)
         serviceQueue.forEach((roomId, unit) -> {
-            updateRoomState(roomId, unit);
+            updateRoomState(roomId, unit, logicSecondsPassed, logicMinutesPassed);
         });
 
         // 2. 更新等待队列 (倒计时)
@@ -328,11 +342,6 @@ public class SchedulerService {
         while (waitIt.hasNext()) {
             Map.Entry<String, WaitingInfo> entry = waitIt.next();
             WaitingInfo info = entry.getValue();
-            // 逻辑时间流逝: 每次 tick 相当于 6 秒逻辑时间 (因为 1s real = 6s logic)
-            // 这里简化: 假设 waitTimeRemaining 存的是 *逻辑秒*
-            // 1s real time = (60 / (timeScaleMs/1000)) * 1s logic?
-            // 按照 prompt: 10s real = 1 min logic = 60s logic. => 1s real = 6s logic.
-            long logicSecondsPassed = 6;
 
             info.setWaitTimeRemaining(info.getWaitTimeRemaining() - logicSecondsPassed);
 
@@ -340,7 +349,6 @@ public class SchedulerService {
                 // 时间片耗尽，触发调度检查
                 log.info("Time slice expired for Room {}", info.getRoomId());
                 // 尝试获取服务
-                // 逻辑: 检查是否有服务对象可以被替换 (同级且服务时间最长)
                 checkTimeSliceAllocation(info);
             }
         }
@@ -349,21 +357,18 @@ public class SchedulerService {
         List<Room> allRooms = roomRepository.findAll();
         for (Room room : allRooms) {
             if (room.getStatus() == RoomStatus.SHUTDOWN || room.getStatus() == RoomStatus.IDLE) {
-                handleTemperatureRecovery(room);
+                handleTemperatureRecovery(room, logicMinutesPassed);
             }
         }
     }
 
-    private void updateRoomState(String roomId, ServiceUnit unit) {
+    private void updateRoomState(String roomId, ServiceUnit unit, long logicSecondsPassed, double logicMinutesPassed) {
         Room room = roomRepository.findByRoomId(roomId).orElse(null);
         if (room == null)
             return;
 
-        // 1s real = 6s logic = 0.1 min logic
-        double logicMinutesPassed = 0.1;
-
         // 更新服务时长
-        unit.setServedDurationSeconds(unit.getServedDurationSeconds() + 6);
+        unit.setServedDurationSeconds(unit.getServedDurationSeconds() + logicSecondsPassed);
 
         // 温度变化
         // 高: 1度/min, 中: 0.5度/min (2min 1度), 低: 0.33度/min (3min 1度)
@@ -415,9 +420,8 @@ public class SchedulerService {
         mqttService.publishStatus(roomId, room);
     }
 
-    private void handleTemperatureRecovery(Room room) {
+    private void handleTemperatureRecovery(Room room, double logicMinutesPassed) {
         // 回温: 0.5度/min
-        double logicMinutesPassed = 0.1; // 1s real
         double recoveryRate = 0.5 * logicMinutesPassed;
 
         double current = room.getCurrentTemp();
