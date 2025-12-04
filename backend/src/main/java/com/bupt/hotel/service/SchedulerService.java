@@ -49,6 +49,9 @@ public class SchedulerService {
     @Value("${hotel.ac.time-scale-ms}")
     private long timeScaleMs;
 
+    // 时间片长度（逻辑秒）：2分钟 = 120秒
+    private static final long TIME_SLICE_LOGIC_SECONDS = 120L;
+
     // 内存中维护的队列
     // 服务队列: RoomId -> ServiceUnit
     private final Map<String, ServiceUnit> serviceQueue = new ConcurrentHashMap<>();
@@ -214,11 +217,11 @@ public class SchedulerService {
             preempt(candidateToPreempt.getRoomId(), newRoomId, newFanSpeed);
         } else if (candidatePriority == newPriority) {
             // 同级，时间片轮转逻辑
-            // 新请求进入等待队列，分配时间片
-            addToWaitingQueue(newRoomId, newFanSpeed, timeSliceSeconds);
+            // 新请求进入等待队列，分配时间片（120秒逻辑时间）
+            addToWaitingQueue(newRoomId, newFanSpeed, TIME_SLICE_LOGIC_SECONDS);
         } else {
-            // 优先级更低，进入等待队列
-            addToWaitingQueue(newRoomId, newFanSpeed, timeSliceSeconds);
+            // 优先级更低，进入等待队列（120秒逻辑时间）
+            addToWaitingQueue(newRoomId, newFanSpeed, TIME_SLICE_LOGIC_SECONDS);
         }
     }
 
@@ -254,8 +257,8 @@ public class SchedulerService {
     private void preempt(String kickedRoomId, String newRoomId, FanSpeed newFanSpeed) {
         // 踢出旧房间
         stopService(kickedRoomId, false); // 这里的 false 表示不是关机，而是被挂起
-        // 加入等待队列，分配等待时间
-        addToWaitingQueue(kickedRoomId, roomRequests.get(kickedRoomId).getFanSpeed(), timeSliceSeconds);
+        // 加入等待队列，分配等待时间（120秒逻辑时间）
+        addToWaitingQueue(kickedRoomId, roomRequests.get(kickedRoomId).getFanSpeed(), TIME_SLICE_LOGIC_SECONDS);
 
         // 启动新房间
         startService(newRoomId, newFanSpeed);
