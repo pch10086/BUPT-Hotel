@@ -152,29 +152,33 @@ public class SchedulerService {
     public synchronized void stopSupply(String roomId, boolean isPowerOff) {
         log.info("Stop Supply: Room={}, PowerOff={}", roomId, isPowerOff);
 
-        if (isPowerOff) {
-            roomRequests.remove(roomId);
-            // 移出等待队列
-            waitingQueue.remove(roomId);
-        }
-
         // 如果在服务中，结束服务并生成详单
         if (serviceQueue.containsKey(roomId)) {
             stopService(roomId, isPowerOff);
-        } else if (waitingQueue.containsKey(roomId) && isPowerOff) {
-            // 如果在等待队列且关机
+        }
+        
+        // 如果在等待队列中，移出等待队列
+        if (waitingQueue.containsKey(roomId)) {
             waitingQueue.remove(roomId);
+        }
+
+        if (isPowerOff) {
+            // 关机：清空请求，更新状态为 SHUTDOWN
+            roomRequests.remove(roomId);
             Room room = roomRepository.findByRoomId(roomId).orElse(null);
             if (room != null) {
                 room.setStatus(RoomStatus.SHUTDOWN);
+                room.setIsOn(false);
                 roomRepository.save(room);
+                mqttService.publishStatus(roomId, room);
             }
-        } else if (!isPowerOff) {
+        } else {
             // 仅仅是达到温度暂停，状态改为 IDLE
             Room room = roomRepository.findByRoomId(roomId).orElse(null);
             if (room != null) {
                 room.setStatus(RoomStatus.IDLE);
                 roomRepository.save(room);
+                mqttService.publishStatus(roomId, room);
             }
         }
     }
@@ -366,13 +370,23 @@ public class SchedulerService {
             Map.Entry<String, WaitingInfo> entry = waitIt.next();
             WaitingInfo info = entry.getValue();
 
-            // 安全检查：如果房间未入住，从等待队列移除
+            // 安全检查：如果房间未入住或已关机，从等待队列移除
             Room room = roomRepository.findByRoomId(info.getRoomId()).orElse(null);
-            if (room != null && (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty())) {
-                log.warn("Room {} is not checked in, removing from waiting queue", info.getRoomId());
-                waitIt.remove();
-                updateRoomStatus(info.getRoomId(), RoomStatus.SHUTDOWN);
-                continue;
+            if (room != null) {
+                // 检查是否未入住
+                if (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty()) {
+                    log.warn("Room {} is not checked in, removing from waiting queue", info.getRoomId());
+                    waitIt.remove();
+                    updateRoomStatus(info.getRoomId(), RoomStatus.SHUTDOWN);
+                    continue;
+                }
+                // 检查是否已关机
+                if (room.getIsOn() == null || !room.getIsOn()) {
+                    log.warn("Room {} is powered off, removing from waiting queue", info.getRoomId());
+                    waitIt.remove();
+                    updateRoomStatus(info.getRoomId(), RoomStatus.SHUTDOWN);
+                    continue;
+                }
             }
 
             info.setWaitTimeRemaining(info.getWaitTimeRemaining() - logicSecondsPassed);
