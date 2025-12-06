@@ -143,6 +143,12 @@ public class MqttService {
         if (room == null)
             return;
 
+        // 如果之前是开机状态，增加开关机次数（每次开关机算一天）
+        if (room.getIsOn() != null && room.getIsOn()) {
+            int count = (room.getPowerCycleCount() != null) ? room.getPowerCycleCount() : 0;
+            room.setPowerCycleCount(count + 1);
+        }
+
         room.setIsOn(false);
         roomRepository.save(room);
 

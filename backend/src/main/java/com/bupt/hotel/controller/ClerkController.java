@@ -87,6 +87,7 @@ public class ClerkController {
                 : null);
         room.setCheckInTime(timeService.getCurrentTime());
         room.setTotalFee(0.0);
+        room.setPowerCycleCount(0); // 重置开关机次数
         // 重置空调状态
         room.setIsOn(false);
         room.setStatus(com.bupt.hotel.entity.RoomStatus.SHUTDOWN);
@@ -134,6 +135,7 @@ public class ClerkController {
         room.setIdCard(null);
         room.setCheckInTime(null);
         room.setTotalFee(0.0);
+        room.setPowerCycleCount(0); // 重置开关机次数
         // 重置空调状态
         room.setIsOn(false);
         room.setStatus(com.bupt.hotel.entity.RoomStatus.SHUTDOWN);

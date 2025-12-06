@@ -94,6 +94,7 @@ public class RoomInitService {
                         room.setIsOn(false);
                         room.setStatus(RoomStatus.SHUTDOWN);
                         room.setTotalFee(0.0);
+                        room.setPowerCycleCount(0);
                     }
 
                     log.info("✓ {} room {}: price={}元/天, coolTemp={}℃, heatTemp={}℃",
@@ -115,6 +116,7 @@ public class RoomInitService {
                     room.setIsOn(false);
                     room.setStatus(RoomStatus.SHUTDOWN);
                     room.setTotalFee(0.0);
+                    room.setPowerCycleCount(0);
                 }
 
                 roomRepository.save(room);

@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -49,6 +48,9 @@ public class BillingService {
         return saved;
     }
 
+    /**
+     * 生成住宿账单（用于退房时，根据开关机次数计算）
+     */
     @Transactional
     public LodgingBill generateLodgingBill(String roomId) {
         Room room = roomRepository.findByRoomId(roomId).orElseThrow();
@@ -59,10 +61,10 @@ public class BillingService {
         bill.setCheckInTime(room.getCheckInTime());
         bill.setCheckOutTime(now);
 
-        // 计算天数: 向上取整? 还是按自然日?
-        // 假设: 只要入住就算1天，每过24h加1天
-        long hours = Duration.between(room.getCheckInTime(), now).toHours();
-        int days = (int) (hours / 24) + 1;
+        // 根据开关机次数计算天数（每次开关机算一天）
+        int days = (room.getPowerCycleCount() != null && room.getPowerCycleCount() > 0) 
+                ? room.getPowerCycleCount() 
+                : 1; // 如果没有开关机记录，至少算1天
 
         bill.setDays(days);
         bill.setTotalLodgingFee(days * room.getPricePerDay());

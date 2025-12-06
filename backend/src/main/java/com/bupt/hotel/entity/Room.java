@@ -61,6 +61,9 @@ public class Room {
     @Column(name = "id_card")
     private String idCard;
 
+    @Column(name = "power_cycle_count")
+    private Integer powerCycleCount; // 开关机次数（每次开关机算一天）
+
     @Transient
     private Double currentSessionFee; // 当前送风会话费用（非持久化）
 }

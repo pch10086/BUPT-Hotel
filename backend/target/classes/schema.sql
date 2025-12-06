@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS `room` (
     `check_in_time` DATETIME COMMENT '当前入住时间',
     `total_fee` DOUBLE DEFAULT 0.0 COMMENT '当前入住累计空调费用',
     `customer_name` VARCHAR(50) COMMENT '入住人姓名',
-    `id_card` VARCHAR(20) COMMENT '身份证号'
+    `id_card` VARCHAR(20) COMMENT '身份证号',
+    `power_cycle_count` INT DEFAULT 0 COMMENT '开关机次数（每次开关机算一天）'
 );
 -- 空调账单表 (总费用)
 CREATE TABLE IF NOT EXISTS `billing_record` (
