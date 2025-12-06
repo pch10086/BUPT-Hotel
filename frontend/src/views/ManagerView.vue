@@ -5,44 +5,73 @@
       <el-tag type="info">{{ currentTime }}</el-tag>
     </div>
 
-    <!-- 房间状态卡片 -->
-    <el-row :gutter="20" class="room-grid">
-      <el-col :span="4" v-for="room in rooms" :key="room.roomId">
-        <el-card
-          :class="['room-card', getStatusClass(room.status)]"
-          shadow="hover"
-        >
-          <div class="room-header">
-            <span class="room-id">{{ room.roomId }}</span>
-            <el-tag size="small" :type="getStatusType(room.status)">{{
-              formatStatus(room.status)
-            }}</el-tag>
-          </div>
-          <div class="room-body">
-            <div class="info-row">
-              <span>当前温度:</span>
-              <span class="val">{{ room.currentTemp?.toFixed(2) }}℃</span>
+    <!-- 房间状态卡片 - 按楼层选择显示 -->
+    <div class="rooms-section">
+      <div class="floor-selector">
+        <div class="selector-wrapper">
+          <el-icon class="selector-icon"><OfficeBuilding /></el-icon>
+          <el-select
+            v-model="selectedFloor"
+            placeholder="选择楼层"
+            class="floor-select"
+            @change="handleFloorChange"
+          >
+            <el-option
+              v-for="floor in floorRooms"
+              :key="floor.floor"
+              :label="`${floor.floor}层`"
+              :value="floor.floor"
+            />
+          </el-select>
+        </div>
+        <div class="floor-info" v-if="currentFloor">
+          <el-tag type="info" size="large">
+            <el-icon><HomeFilled /></el-icon>
+            <span>共 {{ currentFloor.rooms.length }} 间</span>
+          </el-tag>
+        </div>
+      </div>
+      
+      <div class="rooms-container" v-if="currentFloor">
+        <div class="rooms-grid">
+          <el-card
+            v-for="room in currentFloor.rooms"
+            :key="room.roomId"
+            :class="['room-card', getStatusClass(room.status)]"
+            shadow="hover"
+          >
+            <div class="room-header">
+              <span class="room-id">{{ room.roomId }}</span>
+              <el-tag size="small" :type="getStatusType(room.status)">{{
+                formatStatus(room.status)
+              }}</el-tag>
             </div>
-            <div class="info-row">
-              <span>目标温度:</span>
-              <span class="val">{{ room.targetTemp }}℃</span>
+            <div class="room-body">
+              <div class="info-row">
+                <span>当前温度:</span>
+                <span class="val">{{ room.currentTemp?.toFixed(2) }}℃</span>
+              </div>
+              <div class="info-row">
+                <span>目标温度:</span>
+                <span class="val">{{ room.targetTemp }}℃</span>
+              </div>
+              <div class="info-row">
+                <span>风速:</span>
+                <span class="val">{{ room.fanSpeed }}</span>
+              </div>
+              <div class="info-row">
+                <span>费用:</span>
+                <span class="val fee">¥{{ room.totalFee?.toFixed(2) }}</span>
+              </div>
+              <div class="info-row" v-if="room.customerName">
+                <span>住客:</span>
+                <span class="val">{{ room.customerName }}</span>
+              </div>
             </div>
-            <div class="info-row">
-              <span>风速:</span>
-              <span class="val">{{ room.fanSpeed }}</span>
-            </div>
-            <div class="info-row">
-              <span>费用:</span>
-              <span class="val fee">¥{{ room.totalFee?.toFixed(2) }}</span>
-            </div>
-            <div class="info-row" v-if="room.customerName">
-              <span>住客:</span>
-              <span class="val">{{ room.customerName }}</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+          </el-card>
+        </div>
+      </div>
+    </div>
 
     <!-- 队列监控 -->
     <el-row :gutter="20" style="margin-top: 30px">
@@ -182,6 +211,8 @@ const rooms = ref([]);
 const serviceQueue = ref({});
 const waitingQueue = ref({});
 const currentTime = ref(new Date().toLocaleTimeString());
+const selectedFloor = ref(1); // 默认选择第一层
+const currentFloor = ref(null);
 let timer = null;
 let clockTimer = null;
 
@@ -190,10 +221,16 @@ const dateRange = ref([]);
 const loadingReport = ref(false);
 const reportData = ref(null);
 
+// 按楼层组织房间
+const floorRooms = ref([]);
+
 const fetchData = async () => {
   try {
     const resRooms = await api.get("/manager/rooms");
     rooms.value = resRooms.data;
+    
+    // 按楼层组织房间
+    organizeRoomsByFloor();
 
     const resService = await api.get("/manager/queue/service");
     serviceQueue.value = resService.data;
@@ -203,6 +240,55 @@ const fetchData = async () => {
   } catch (e) {
     console.error(e);
   }
+};
+
+// 按楼层组织房间
+const organizeRoomsByFloor = () => {
+  const floors = {};
+  rooms.value.forEach(room => {
+    const floor = parseInt(room.roomId.charAt(0));
+    if (!floors[floor]) {
+      floors[floor] = [];
+    }
+    floors[floor].push(room);
+  });
+  
+  // 转换为数组并按楼层排序，同时分离上下排
+  floorRooms.value = Object.keys(floors)
+    .map(floor => {
+      const floorNum = parseInt(floor);
+      const allRooms = floors[floor].sort((a, b) => a.roomId.localeCompare(b.roomId));
+      // 上排：101-105, 201-205, ...
+      const upperRooms = allRooms.filter(r => {
+        const roomNum = parseInt(r.roomId.substring(1));
+        return roomNum >= 1 && roomNum <= 5;
+      });
+      // 下排：106-110, 206-210, ...
+      const lowerRooms = allRooms.filter(r => {
+        const roomNum = parseInt(r.roomId.substring(1));
+        return roomNum >= 6 && roomNum <= 10;
+      });
+      return {
+        floor: floorNum,
+        rooms: allRooms,
+        upperRooms,
+        lowerRooms
+      };
+    })
+    .sort((a, b) => a.floor - b.floor);
+  
+  // 更新当前楼层
+  updateCurrentFloor();
+};
+
+// 更新当前楼层
+const updateCurrentFloor = () => {
+  currentFloor.value = floorRooms.value.find(f => f.floor === selectedFloor.value);
+};
+
+// 处理楼层切换
+const handleFloorChange = () => {
+  updateCurrentFloor();
 };
 
 const formatQueue = (queueObj) => {
@@ -288,6 +374,8 @@ onMounted(() => {
   clockTimer = setInterval(() => {
     currentTime.value = new Date().toLocaleTimeString();
   }, 1000);
+  // 初始化当前楼层
+  updateCurrentFloor();
 });
 
 onUnmounted(() => {
@@ -325,31 +413,115 @@ onUnmounted(() => {
   background-clip: text;
 }
 
-.room-grid {
+.rooms-section {
   margin-bottom: 30px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.floor-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  border-radius: 12px;
+  border: 1px solid #e4e7ed;
+}
+
+.selector-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selector-icon {
+  font-size: 24px;
+  color: #667eea;
+}
+
+.floor-select {
+  width: 180px;
+}
+
+:deep(.floor-select .el-input__wrapper) {
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+:deep(.floor-select .el-input__inner) {
+  font-weight: 600;
+  font-size: 16px;
+  color: #303133;
+}
+
+.floor-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.floor-info .el-tag {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rooms-container {
+  width: 100%;
+}
+
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 20px;
+  justify-items: center;
 }
 
 .room-card {
-  margin-bottom: 20px;
+  width: 100%;
+  max-width: 240px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border: 1px solid #e4e7ed;
 }
 
 .room-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
+  border-color: #667eea;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f4ff 100%);
 }
 
 .room-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  font-weight: 600;
-  font-size: 18px;
-  color: #303133;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.room-id {
+  font-weight: 700;
+  font-size: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 1px;
 }
 
 .info-row {
@@ -410,23 +582,27 @@ onUnmounted(() => {
 
 /* 状态边框颜色 */
 .status-serving {
-  border-top: 4px solid #67c23a;
-  box-shadow: 0 2px 12px rgba(103, 194, 58, 0.15);
+  border-left: 4px solid #67c23a;
+  background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
+  box-shadow: 0 4px 16px rgba(103, 194, 58, 0.15);
 }
 
 .status-waiting {
-  border-top: 4px solid #e6a23c;
-  box-shadow: 0 2px 12px rgba(230, 162, 60, 0.15);
+  border-left: 4px solid #e6a23c;
+  background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
+  box-shadow: 0 4px 16px rgba(230, 162, 60, 0.15);
 }
 
 .status-idle {
-  border-top: 4px solid #909399;
-  box-shadow: 0 2px 12px rgba(144, 147, 153, 0.15);
+  border-left: 4px solid #909399;
+  background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+  box-shadow: 0 4px 16px rgba(144, 147, 153, 0.15);
 }
 
 .status-shutdown {
-  border-top: 4px solid #f56c6c;
-  box-shadow: 0 2px 12px rgba(245, 108, 108, 0.15);
+  border-left: 4px solid #f56c6c;
+  background: linear-gradient(135deg, #fef0f0 0%, #ffffff 100%);
+  box-shadow: 0 4px 16px rgba(245, 108, 108, 0.15);
 }
 
 :deep(.el-card__header) {

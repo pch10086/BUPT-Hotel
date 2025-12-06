@@ -198,7 +198,7 @@ const handleModeChange = (roomId, mode) => {
     control.targetTemp = 25;
     control.fanSpeed = 'MIDDLE';
   } else if (mode === 'HEAT') {
-    control.targetTemp = 22;
+    control.targetTemp = 23;
     control.fanSpeed = 'MIDDLE';
   }
 };

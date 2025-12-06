@@ -41,7 +41,9 @@ public class ClerkController {
     public Room checkIn(@RequestBody CheckInRequest req) {
         Room room = roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
         room.setCustomerName(req.getCustomerName());
-        room.setIdCard(req.getIdCard());
+        // 身份证号可以为空，空字符串转换为null
+        room.setIdCard(req.getIdCard() != null && !req.getIdCard().trim().isEmpty() 
+            ? req.getIdCard() : null);
         room.setCheckInTime(timeService.getCurrentTime());
         room.setTotalFee(0.0);
         // 重置空调状态
@@ -74,5 +76,19 @@ public class ClerkController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=bill_" + roomId + ".csv")
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .body(bytes);
+    }
+
+    @PostMapping("/checkout/confirm")
+    public Room confirmCheckout(@RequestParam String roomId) {
+        Room room = roomRepository.findByRoomId(roomId).orElseThrow();
+        // 清除入住信息
+        room.setCustomerName(null);
+        room.setIdCard(null);
+        room.setCheckInTime(null);
+        room.setTotalFee(0.0);
+        // 重置空调状态
+        room.setIsOn(false);
+        room.setStatus(com.bupt.hotel.entity.RoomStatus.SHUTDOWN);
+        return roomRepository.save(room);
     }
 }
