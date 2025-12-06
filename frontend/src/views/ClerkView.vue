@@ -191,9 +191,6 @@
                 <el-tag :type="getRoomTypeTag(room.roomId)" size="small" effect="plain">
                   {{ getRoomType(room.roomId) }}
                 </el-tag>
-                <el-tag v-if="isOriginalRoom(room.roomId)" type="success" size="small" effect="dark">
-                  原{{ getOriginalRoomNumber(room.roomId) }}
-                </el-tag>
               </div>
             </div>
             <div class="room-body">
