@@ -1,6 +1,7 @@
 <template>
   <div class="guest-container">
     <div class="header">
+      <el-icon><House /></el-icon>
       <h2>客房空调控制系统</h2>
     </div>
 
@@ -22,7 +23,6 @@
         <template #header>
           <div class="card-header">
             <div class="room-title">
-              <el-icon><House /></el-icon>
               <span>{{ room.roomId }}</span>
               <span v-if="room.customerName" class="customer-name">({{ room.customerName }})</span>
             </div>
@@ -93,13 +93,17 @@
         <!-- 开机状态：监控与控制 -->
         <div v-else class="control-body on-state">
           <div class="metrics">
-            <div class="metric-item">
+            <div class="metric-item wide">
               <div class="m-label">室温</div>
               <div class="m-value temp">{{ room.currentTemp?.toFixed(1) }}℃</div>
             </div>
             <div class="metric-item">
-              <div class="m-label">费用</div>
+              <div class="m-label">总费用</div>
               <div class="m-value fee">¥{{ room.totalFee?.toFixed(1) }}</div>
+            </div>
+            <div class="metric-item">
+              <div class="m-label">本次费用</div>
+              <div class="m-value fee">¥{{ room.currentSessionFee?.toFixed(1) || '0.0' }}</div>
             </div>
             <div class="metric-item">
               <div class="m-label">模式</div>
@@ -415,51 +419,43 @@ onUnmounted(() => {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  text-align: center;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  padding: 16px;
-  border-radius: 10px;
-  margin-bottom: 8px;
-  min-height: 100px;
-  flex-shrink: 0;
+  align-items: stretch;
 }
 
 .metric-item {
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 8px;
-  transition: all 0.3s;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.metric-item:hover {
-  background: rgba(255, 255, 255, 1);
-  transform: scale(1.05);
+.metric-item.wide {
+  grid-column: span 2;
 }
 
 .m-label {
+  color: #909399;
   font-size: 12px;
-  color: #606266;
-  margin-bottom: 6px;
-  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 .m-value {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 20px;
   color: #303133;
-  line-height: 1.2;
 }
 
 .m-value.temp { 
   color: #67c23a;
-  font-size: 20px;
 }
 
 .m-value.fee { 
   color: #409eff;
-  font-size: 20px;
 }
 
 .action-btn {

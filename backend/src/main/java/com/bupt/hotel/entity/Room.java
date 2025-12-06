@@ -3,6 +3,7 @@ package com.bupt.hotel.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import jakarta.persistence.Transient;
 
 @Data
 @Entity
@@ -33,7 +34,13 @@ public class Room {
     private Boolean isOn;
 
     @Column(name = "initial_temp")
-    private Double initialTemp;
+    private Double initialTemp; // 保留用于兼容，实际使用initialTempCool和initialTempHeat
+
+    @Column(name = "initial_temp_cool", nullable = false)
+    private Double initialTempCool; // 制冷模式下的初始温度
+
+    @Column(name = "initial_temp_heat", nullable = false)
+    private Double initialTempHeat; // 制热模式下的初始温度
 
     @Column(name = "price_per_day")
     private Double pricePerDay;
@@ -53,4 +60,7 @@ public class Room {
 
     @Column(name = "id_card")
     private String idCard;
+
+    @Transient
+    private Double currentSessionFee; // 当前送风会话费用（非持久化）
 }

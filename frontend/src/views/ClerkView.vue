@@ -135,7 +135,7 @@
           type="danger"
           @click="handleConfirmCheckout"
           :loading="loading"
-          :disabled="!checkoutRoomId || (!acBill && !lodgingBill)"
+          :disabled="!checkoutRoomId"
         >
           确认退房
         </el-button>
@@ -208,10 +208,6 @@
                 <span class="value">{{ room.customerName }}</span>
               </div>
               <div class="room-info-item">
-                <span class="label">温度:</span>
-                <span class="value">{{ room.currentTemp?.toFixed(1) }}℃</span>
-              </div>
-              <div class="room-info-item">
                 <span class="label">房价:</span>
                 <span class="value price">¥{{ room.pricePerDay }}/天</span>
               </div>
@@ -234,7 +230,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from "vue";
 import api from "@/api";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { User, CircleCheck, OfficeBuilding, HomeFilled } from "@element-plus/icons-vue";
 
 const loading = ref(false);
@@ -407,12 +403,10 @@ const fetchRooms = async () => {
       const updateRoom = (room) => {
         const roomData = allRooms.value.find(r => r.roomId === room.roomId);
         if (roomData) {
-          const originalType = room.type;
-          const originalPrice = room.pricePerDay;
+          // 从后端API获取的数据是准确的,直接使用
           Object.assign(room, roomData);
-          if (originalType) room.type = originalType;
-          if (originalPrice) room.pricePerDay = originalPrice;
         } else {
+          // 如果后端未返回该房间数据,才使用本地默认配置
           if (!room.status) room.status = 'SHUTDOWN';
           if (!room.currentTemp) room.currentTemp = room.type === 'king' ? 25 : 28;
           if (room.customerName === undefined) room.customerName = null;
@@ -514,13 +508,37 @@ const handleExport = async () => {
 
 // 确认退房
 const handleConfirmCheckout = async () => {
-  if (!checkoutRoomId.value) return;
+  if (!checkoutRoomId.value) {
+    ElMessage.warning("请选择房间");
+    return;
+  }
+  
+  // 确认对话框
+  try {
+    await ElMessageBox.confirm(
+      `确认退房房间 ${checkoutRoomId.value} 吗？`,
+      '确认退房',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+  } catch {
+    // 用户取消
+    return;
+  }
   
   loading.value = true;
   try {
-    // 先确保账单已生成
+    // 先尝试生成账单（如果还没有生成）
     if (!acBill.value && !lodgingBill.value) {
-      await handleCheckout();
+      try {
+        await handleCheckout();
+      } catch (e) {
+        // 账单生成失败不影响退房，继续执行
+        console.warn("账单生成失败，继续退房流程", e);
+      }
     }
     
     // 调用退房接口，清除房间的入住信息
@@ -528,16 +546,20 @@ const handleConfirmCheckout = async () => {
       params: { roomId: checkoutRoomId.value },
     });
     
+    ElMessage.success(`房间 ${checkoutRoomId.value} 退房成功`);
+    
+    // 关闭对话框并重置
     checkoutDialogVisible.value = false;
     checkoutRoomId.value = "";
     acBill.value = null;
     lodgingBill.value = null;
     details.value = [];
     
+    // 刷新房间数据
     await fetchRooms();
-    ElMessage.success("退房成功");
   } catch (e) {
-    ElMessage.error("退房失败: " + (e.response?.data?.message || e.message));
+    console.error("退房失败", e);
+    ElMessage.error("退房失败: " + (e.response?.data?.message || e.message || "未知错误"));
   } finally {
     loading.value = false;
   }

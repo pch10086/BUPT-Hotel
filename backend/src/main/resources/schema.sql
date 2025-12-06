@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS `room` (
     `fan_speed` VARCHAR(10) NOT NULL COMMENT '风速: HIGH, MIDDLE, LOW',
     `mode` VARCHAR(10) NOT NULL COMMENT '模式: COOL, HEAT',
     `is_on` BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否开机',
-    `initial_temp` DOUBLE NOT NULL COMMENT '初始温度',
+    `initial_temp` DOUBLE NOT NULL COMMENT '初始温度（兼容字段）',
+    `initial_temp_cool` DOUBLE NOT NULL COMMENT '制冷模式初始温度',
+    `initial_temp_heat` DOUBLE NOT NULL COMMENT '制热模式初始温度',
     `price_per_day` DOUBLE NOT NULL COMMENT '房价/每天',
     `status` VARCHAR(20) NOT NULL DEFAULT 'IDLE' COMMENT '状态: IDLE(空闲), SERVING(服务中), WAITING(等待中), SHUTDOWN(关机)',
     `check_in_time` DATETIME COMMENT '当前入住时间',
@@ -47,7 +49,17 @@ CREATE TABLE IF NOT EXISTS `lodging_bill` (
     `total_lodging_fee` DOUBLE NOT NULL COMMENT '住宿总费用',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 数据库迁移：为现有表添加新字段（如果不存在）
+-- 注意：H2 数据库不支持 IF NOT EXISTS 在 ALTER TABLE 中，所以使用异常处理或先检查
+-- 由于使用 H2 内存数据库，每次重启都会重建表，所以这个迁移主要用于兼容性
+-- 如果使用 MySQL，可以取消注释以下语句：
+-- ALTER TABLE `room` ADD COLUMN IF NOT EXISTS `initial_temp_cool` DOUBLE;
+-- ALTER TABLE `room` ADD COLUMN IF NOT EXISTS `initial_temp_heat` DOUBLE;
+-- UPDATE `room` SET `initial_temp_cool` = `initial_temp`, `initial_temp_heat` = `initial_temp` WHERE `initial_temp_cool` IS NULL;
 -- 初始化房间数据 (根据测试用例)
+-- 注意：由于 RoomInitService 会自动初始化40个房间，这里的 INSERT 语句主要用于测试
+-- 如果数据库已存在旧数据，建议先删除或使用 RoomInitService 进行初始化
 INSERT INTO `room` (
         `room_id`,
         `current_temp`,
@@ -56,6 +68,8 @@ INSERT INTO `room` (
         `mode`,
         `is_on`,
         `initial_temp`,
+        `initial_temp_cool`,
+        `initial_temp_heat`,
         `price_per_day`,
         `status`
     )
@@ -67,6 +81,8 @@ VALUES (
         'COOL',
         FALSE,
         32.0,
+        32.0,
+        10.0,
         100.0,
         'SHUTDOWN'
     ),
@@ -78,6 +94,8 @@ VALUES (
         'COOL',
         FALSE,
         28.0,
+        28.0,
+        15.0,
         125.0,
         'SHUTDOWN'
     ),
@@ -89,6 +107,8 @@ VALUES (
         'COOL',
         FALSE,
         30.0,
+        30.0,
+        18.0,
         150.0,
         'SHUTDOWN'
     ),
@@ -100,6 +120,8 @@ VALUES (
         'COOL',
         FALSE,
         29.0,
+        29.0,
+        12.0,
         200.0,
         'SHUTDOWN'
     ),
@@ -111,6 +133,12 @@ VALUES (
         'COOL',
         FALSE,
         35.0,
+        35.0,
+        14.0,
         100.0,
         'SHUTDOWN'
-    );
+    )
+ON DUPLICATE KEY UPDATE
+    `initial_temp_cool` = VALUES(`initial_temp_cool`),
+    `initial_temp_heat` = VALUES(`initial_temp_heat`),
+    `price_per_day` = VALUES(`price_per_day`);

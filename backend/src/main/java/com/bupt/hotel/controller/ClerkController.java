@@ -30,6 +30,9 @@ public class ClerkController {
     @Autowired
     private TimeService timeService;
 
+    @Autowired
+    private com.bupt.hotel.service.SchedulerService schedulerService;
+
     @Data
     public static class CheckInRequest {
         private String roomId;
@@ -81,6 +84,10 @@ public class ClerkController {
     @PostMapping("/checkout/confirm")
     public Room confirmCheckout(@RequestParam String roomId) {
         Room room = roomRepository.findByRoomId(roomId).orElseThrow();
+        
+        // 先停止空调服务（如果正在运行），从服务队列和等待队列中移除
+        schedulerService.stopSupply(roomId, true);
+        
         // 清除入住信息
         room.setCustomerName(null);
         room.setIdCard(null);
@@ -89,6 +96,7 @@ public class ClerkController {
         // 重置空调状态
         room.setIsOn(false);
         room.setStatus(com.bupt.hotel.entity.RoomStatus.SHUTDOWN);
+        
         return roomRepository.save(room);
     }
 }

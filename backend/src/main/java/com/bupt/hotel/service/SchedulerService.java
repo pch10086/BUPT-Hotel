@@ -113,6 +113,21 @@ public class SchedulerService {
         roomRequests.put(roomId, req);
 
         Room room = roomRepository.findByRoomId(roomId).orElseThrow();
+
+        // 如果模式改变且房间处于关机状态，重置当前温度为对应模式的初始温度
+        Mode oldMode = room.getMode();
+        if (oldMode != mode && (room.getIsOn() == null || !room.getIsOn())) {
+            double newInitialTemp;
+            if (mode == Mode.COOL) {
+                newInitialTemp = room.getInitialTempCool() != null ? room.getInitialTempCool() : room.getInitialTemp();
+            } else {
+                newInitialTemp = room.getInitialTempHeat() != null ? room.getInitialTempHeat() : room.getInitialTemp();
+            }
+            room.setCurrentTemp(newInitialTemp);
+            log.info("Mode changed from {} to {} for room {}, resetting current temp to {}", oldMode, mode, roomId,
+                    newInitialTemp);
+        }
+
         room.setMode(mode);
         room.setTargetTemp(targetTemp);
         room.setFanSpeed(fanSpeed);
@@ -156,7 +171,7 @@ public class SchedulerService {
         if (serviceQueue.containsKey(roomId)) {
             stopService(roomId, isPowerOff);
         }
-        
+
         // 如果在等待队列中，移出等待队列
         if (waitingQueue.containsKey(roomId)) {
             waitingQueue.remove(roomId);
@@ -345,7 +360,7 @@ public class SchedulerService {
             Map.Entry<String, ServiceUnit> entry = serviceIt.next();
             String roomId = entry.getKey();
             ServiceUnit unit = entry.getValue();
-            
+
             // 安全检查：如果房间未入住，自动停止服务
             Room room = roomRepository.findByRoomId(roomId).orElse(null);
             if (room != null && (room.getCustomerName() == null || room.getCustomerName().trim().isEmpty())) {
@@ -359,7 +374,7 @@ public class SchedulerService {
                 mqttService.publishStatus(roomId, room);
                 continue;
             }
-            
+
             updateRoomState(roomId, unit, logicSecondsPassed, logicMinutesPassed);
         }
 
@@ -471,10 +486,16 @@ public class SchedulerService {
         double recoveryRate = 0.5 * logicMinutesPassed;
 
         double current = room.getCurrentTemp();
-        double initial = room.getInitialTemp();
+        // 根据当前模式选择对应的初始温度
+        double initial;
+        if (room.getMode() == Mode.COOL) {
+            initial = room.getInitialTempCool() != null ? room.getInitialTempCool() : room.getInitialTemp();
+        } else {
+            initial = room.getInitialTempHeat() != null ? room.getInitialTempHeat() : room.getInitialTemp();
+        }
 
         if (room.getStatus() == RoomStatus.SHUTDOWN) {
-            // 趋向初始温度
+            // 关机状态：趋向对应模式下的初始温度
             if (Math.abs(current - initial) < recoveryRate) {
                 current = initial;
             } else if (current > initial) {
@@ -486,31 +507,38 @@ public class SchedulerService {
             roomRepository.save(room);
         } else if (room.getStatus() == RoomStatus.IDLE) {
             // 达到目标温度后的回温
-            // 制冷模式: 温度回升; 制热模式: 温度下降
-            // 阈值: 回温 1 度后重新启动
-            double target = room.getTargetTemp();
+            // 只有开机状态才进行回温并重新启动
+            if (room.getIsOn() != null && room.getIsOn()) {
+                // 制冷模式: 温度回升; 制热模式: 温度下降
+                // 阈值: 回温 1 度后重新启动
+                double target = room.getTargetTemp();
 
-            if (room.getMode() == Mode.COOL) {
-                current += recoveryRate;
-                if (current >= target + 1.0) {
-                    // 重新请求送风
-                    RequestInfo req = roomRequests.get(room.getRoomId());
-                    if (req != null) {
-                        requestSupply(req.getRoomId(), req.getMode(), req.getTargetTemp(), req.getFanSpeed());
+                if (room.getMode() == Mode.COOL) {
+                    // 制冷模式：温度回升
+                    current += recoveryRate;
+                    // 当温度回升到目标温度+1度时，重新启动
+                    if (current >= target + 1.0) {
+                        // 重新请求送风
+                        RequestInfo req = roomRequests.get(room.getRoomId());
+                        if (req != null) {
+                            requestSupply(req.getRoomId(), req.getMode(), req.getTargetTemp(), req.getFanSpeed());
+                        }
+                    }
+                } else if (room.getMode() == Mode.HEAT) {
+                    // 制热模式：温度下降
+                    current -= recoveryRate;
+                    // 当温度下降到目标温度-1度时，重新启动
+                    if (current <= target - 1.0) {
+                        // 重新请求送风
+                        RequestInfo req = roomRequests.get(room.getRoomId());
+                        if (req != null) {
+                            requestSupply(req.getRoomId(), req.getMode(), req.getTargetTemp(), req.getFanSpeed());
+                        }
                     }
                 }
-            } else {
-                current -= recoveryRate;
-                if (current <= target - 1.0) {
-                    // 重新请求送风
-                    RequestInfo req = roomRequests.get(room.getRoomId());
-                    if (req != null) {
-                        requestSupply(req.getRoomId(), req.getMode(), req.getTargetTemp(), req.getFanSpeed());
-                    }
-                }
+                room.setCurrentTemp(current);
+                roomRepository.save(room);
             }
-            room.setCurrentTemp(current);
-            roomRepository.save(room);
         }
         // 即使是关机或IDLE，也推送状态更新温度
         mqttService.publishStatus(room.getRoomId(), room);
@@ -544,5 +572,16 @@ public class SchedulerService {
 
     public Map<String, WaitingInfo> getWaitingQueue() {
         return waitingQueue;
+    }
+
+    /**
+     * 获取当前送风会话的费用，若不在服务队列则返回0
+     */
+    public double getCurrentSessionFee(String roomId) {
+        ServiceUnit unit = serviceQueue.get(roomId);
+        if (unit == null) {
+            return 0.0;
+        }
+        return unit.getCurrentFee();
     }
 }

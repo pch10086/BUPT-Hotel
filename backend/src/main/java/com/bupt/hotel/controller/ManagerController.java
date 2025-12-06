@@ -30,7 +30,12 @@ public class ManagerController {
 
     @GetMapping("/rooms")
     public List<Room> getAllRooms() {
-        return roomRepository.findAll();
+        List<Room> rooms = roomRepository.findAll();
+        // 填充当前会话费用（非持久化字段）
+        for (Room room : rooms) {
+            room.setCurrentSessionFee(schedulerService.getCurrentSessionFee(room.getRoomId()));
+        }
+        return rooms;
     }
 
     @GetMapping("/queue/service")
