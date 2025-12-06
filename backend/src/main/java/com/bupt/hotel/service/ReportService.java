@@ -18,6 +18,9 @@ public class ReportService {
     @Autowired
     private BillingDetailRepository billingDetailRepository;
 
+    @Autowired
+    private TimeService timeService;
+
     @Data
     public static class GlobalReport {
         private double totalFee;
@@ -38,8 +41,8 @@ public class ReportService {
         report.setTotalFee(Math.round(totalFee * 100.0) / 100.0);
 
         // 2. 总服务时长
-        long totalDuration = details.stream().mapToLong(BillingDetail::getDuration).sum();
-        report.setTotalDurationSeconds(totalDuration);
+        long totalDurationLogic = details.stream().mapToLong(BillingDetail::getDuration).sum();
+        report.setTotalDurationSeconds(timeService.logicSecondsToRealSeconds(totalDurationLogic));
 
         // 3. 各房间费用排名
         Map<String, Double> ranking = details.stream()
@@ -60,7 +63,12 @@ public class ReportService {
         Map<FanSpeed, Long> fanStats = details.stream()
                 .collect(Collectors.groupingBy(
                         BillingDetail::getFanSpeed,
-                        Collectors.summingLong(BillingDetail::getDuration)));
+                        Collectors.summingLong(BillingDetail::getDuration)))
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> timeService.logicSecondsToRealSeconds(e.getValue())));
         report.setFanSpeedUsageDuration(fanStats);
 
         // 5. 总服务次数
