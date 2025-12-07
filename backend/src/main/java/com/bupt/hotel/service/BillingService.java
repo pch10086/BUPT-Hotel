@@ -62,8 +62,8 @@ public class BillingService {
         bill.setCheckOutTime(now);
 
         // 根据开关机次数计算天数（每次开关机算一天）
-        int days = (room.getPowerCycleCount() != null && room.getPowerCycleCount() > 0) 
-                ? room.getPowerCycleCount() 
+        int days = (room.getPowerCycleCount() != null && room.getPowerCycleCount() > 0)
+                ? room.getPowerCycleCount()
                 : 1; // 如果没有开关机记录，至少算1天
 
         bill.setDays(days);

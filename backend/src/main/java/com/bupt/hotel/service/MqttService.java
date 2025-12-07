@@ -132,7 +132,8 @@ public class MqttService {
         room.setIsOn(true);
         // checkInTime is managed by Clerk
         // room.setCheckInTime(LocalDateTime.now());
-        room.setTotalFee(0.0);
+        // 总费用不应该在开机时重置，应该从入住开始累计
+        // room.setTotalFee(0.0);
         roomRepository.save(room);
 
         schedulerService.requestSupply(cmd.getRoomId(), cmd.getMode(), cmd.getTargetTemp(), cmd.getFanSpeed());

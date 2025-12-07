@@ -51,7 +51,8 @@ public class GuestController {
         room.setIsOn(true);
         // checkInTime should be set by ClerkController.checkIn
         // room.setCheckInTime(LocalDateTime.now());
-        room.setTotalFee(0.0);
+        // 总费用不应该在开机时重置，应该从入住开始累计
+        // room.setTotalFee(0.0);
         roomRepository.save(room);
 
         schedulerService.requestSupply(req.getRoomId(), req.getMode(), req.getTargetTemp(), req.getFanSpeed());

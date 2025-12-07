@@ -91,6 +91,8 @@ public class ClerkController {
         // 重置空调状态
         room.setIsOn(false);
         room.setStatus(com.bupt.hotel.entity.RoomStatus.SHUTDOWN);
+        // 清除总费用缓存
+        schedulerService.clearTotalFeeCache(req.getRoomId());
         return roomRepository.save(room);
     }
 
@@ -138,6 +140,8 @@ public class ClerkController {
         room.setPowerCycleCount(0); // 重置开关机次数
         // 重置空调状态
         room.setIsOn(false);
+        // 清除总费用缓存
+        schedulerService.clearTotalFeeCache(roomId);
         room.setStatus(com.bupt.hotel.entity.RoomStatus.SHUTDOWN);
 
         return roomRepository.save(room);

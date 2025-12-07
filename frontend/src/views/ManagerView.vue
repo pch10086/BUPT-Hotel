@@ -60,8 +60,12 @@
                 <span class="val">{{ room.fanSpeed }}</span>
               </div>
               <div class="info-row">
-                <span>费用:</span>
+                <span>总费用:</span>
                 <span class="val fee">¥{{ room.totalFee?.toFixed(2) }}</span>
+              </div>
+              <div class="info-row" v-if="room.isOn">
+                <span>当前费用:</span>
+                <span class="val fee">¥{{ room.currentSessionFee?.toFixed(2) || '0.00' }}</span>
               </div>
               <div class="info-row" v-if="room.customerName">
                 <span>住客:</span>

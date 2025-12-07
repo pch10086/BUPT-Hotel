@@ -54,8 +54,20 @@ public class ManagerController {
     public List<Room> getAllRooms() {
         List<Room> rooms = roomRepository.findAll();
         // 填充当前会话费用（非持久化字段）
+        // 使用内存缓存确保 totalFee 和 currentSessionFee 实时同步
         for (Room room : rooms) {
-            room.setCurrentSessionFee(schedulerService.getCurrentSessionFee(room.getRoomId()));
+            double currentSessionFee = schedulerService.getCurrentSessionFee(room.getRoomId());
+            room.setCurrentSessionFee(currentSessionFee);
+            
+            // 优先使用内存缓存中的总费用（实时更新），如果没有则使用数据库中的值
+            Double cachedTotalFee = schedulerService.getCachedTotalFee(room.getRoomId());
+            if (cachedTotalFee != null) {
+                room.setTotalFee(cachedTotalFee);
+            }
+            // 如果缓存中没有，使用数据库中的值（并更新缓存）
+            else if (room.getTotalFee() != null) {
+                schedulerService.updateTotalFeeCache(room.getRoomId(), room.getTotalFee());
+            }
         }
         return rooms;
     }

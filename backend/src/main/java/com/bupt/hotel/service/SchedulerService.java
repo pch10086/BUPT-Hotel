@@ -55,6 +55,9 @@ public class SchedulerService {
     // 内存中维护的队列
     // 服务队列: RoomId -> ServiceUnit
     private final Map<String, ServiceUnit> serviceQueue = new ConcurrentHashMap<>();
+    
+    // 内存缓存：存储每个房间的实时总费用（用于快速读取，避免数据库延迟）
+    private final Map<String, Double> totalFeeCache = new ConcurrentHashMap<>();
     // 等待队列: RoomId -> WaitingInfo
     private final Map<String, WaitingInfo> waitingQueue = new ConcurrentHashMap<>();
 
@@ -317,13 +320,16 @@ public class SchedulerService {
         detail.setFanSpeed(unit.getFanSpeed());
         detail.setFee(unit.getCurrentFee());
 
-        // 计算累计费用
+        // 获取当前总费用（已经在服务过程中实时更新了）
         Room room = roomRepository.findByRoomId(unit.getRoomId()).orElseThrow();
-        double newTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee()) + unit.getCurrentFee();
-        room.setTotalFee(newTotal);
+        // 总费用已经在服务过程中实时更新，这里直接使用当前总费用作为累计费用
+        double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
         roomRepository.save(room);
+        
+        // 更新缓存（服务结束时，总费用已经包含了当前会话费用）
+        totalFeeCache.put(unit.getRoomId(), currentTotal);
 
-        detail.setCumulativeFee(newTotal);
+        detail.setCumulativeFee(currentTotal);
         billingDetailRepository.save(detail);
     }
 
@@ -472,11 +478,21 @@ public class SchedulerService {
         double feeIncrement = tempChange * 1.0;
         unit.setCurrentFee(unit.getCurrentFee() + feeIncrement);
 
+        // 实时更新总费用：将费用增量累加到总费用
+        double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
+        double newTotal = currentTotal + feeIncrement;
+        room.setTotalFee(newTotal);
+
         // 格式化保留2位小数
         room.setCurrentTemp(Math.round(room.getCurrentTemp() * 100.0) / 100.0);
-        room.setTotalFee(Math.round((room.getTotalFee() == null ? 0 : room.getTotalFee()) * 100.0) / 100.0);
+        double roundedTotal = Math.round(newTotal * 100.0) / 100.0;
+        room.setTotalFee(roundedTotal);
+        
+        // 同时更新内存缓存，确保实时读取
+        totalFeeCache.put(roomId, roundedTotal);
 
-        roomRepository.save(room);
+        // 使用 saveAndFlush 确保立即刷新到数据库，避免读取延迟
+        roomRepository.saveAndFlush(room);
         // MQTT 推送实时状态
         mqttService.publishStatus(roomId, room);
     }
@@ -583,5 +599,26 @@ public class SchedulerService {
             return 0.0;
         }
         return unit.getCurrentFee();
+    }
+    
+    /**
+     * 获取缓存中的总费用（实时更新）
+     */
+    public Double getCachedTotalFee(String roomId) {
+        return totalFeeCache.get(roomId);
+    }
+    
+    /**
+     * 更新总费用缓存
+     */
+    public void updateTotalFeeCache(String roomId, double totalFee) {
+        totalFeeCache.put(roomId, totalFee);
+    }
+    
+    /**
+     * 清除总费用缓存（用于入住/退房时）
+     */
+    public void clearTotalFeeCache(String roomId) {
+        totalFeeCache.remove(roomId);
     }
 }
