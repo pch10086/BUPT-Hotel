@@ -52,10 +52,13 @@ public class SchedulerService {
     // 时间片长度（逻辑秒）：2分钟 = 120秒
     private static final long TIME_SLICE_LOGIC_SECONDS = 120L;
 
+    // 在 tick 内是否延迟执行等待队列分配（防止 mid-tick stop 导致不一致分配）
+    private volatile boolean deferAllocations = false;
+
     // 内存中维护的队列
     // 服务队列: RoomId -> ServiceUnit
     private final Map<String, ServiceUnit> serviceQueue = new ConcurrentHashMap<>();
-    
+
     // 内存缓存：存储每个房间的实时总费用（用于快速读取，避免数据库延迟）
     private final Map<String, Double> totalFeeCache = new ConcurrentHashMap<>();
     // 等待队列: RoomId -> WaitingInfo
@@ -78,7 +81,8 @@ public class SchedulerService {
         private String roomId;
         private FanSpeed fanSpeed;
         private long waitTimeRemaining; // 剩余等待时间(逻辑秒)
-        private long totalWaitTime; // 分配的等待时间
+        private long totalWaitTime; // 分配的等待时间（每个时间片 = 120秒）
+        private long totalWaitedTime; // 累计已等待时间(逻辑秒)，用于比较优先级
     }
 
     @Data
@@ -139,20 +143,30 @@ public class SchedulerService {
         if (serviceQueue.containsKey(roomId)) {
             ServiceUnit unit = serviceQueue.get(roomId);
             if (unit.getFanSpeed() != fanSpeed) {
-                // 结束当前服务，重新请求
-                stopService(roomId, false); // false表示不是关机，是重新调度
-                dispatch(roomId, fanSpeed);
+                // 风速改变：结束当前服务，重新请求（重置累计服务时长）
+                log.info("Fan speed changed for room {} in service queue, re-dispatching", roomId);
+                // 1. 先从服务队列移除并生成详单
+                stopServiceWithoutAllocation(roomId);
+                // 2. 以新风速加入等待队列
+                addToWaitingQueue(roomId, fanSpeed, TIME_SLICE_LOGIC_SECONDS);
+                // 3. 让所有等待队列中的请求竞争这个空出来的服务位
+                tryAllocateFromWaitingQueue();
             } else {
                 // 风速没变，仅更新目标温度等，不影响调度
                 roomRepository.save(room);
             }
         } else if (waitingQueue.containsKey(roomId)) {
-            // 如果在等待队列，更新参数
+            // 如果在等待队列，且风速改变 -> 视为新请求，重新调度
             WaitingInfo info = waitingQueue.get(roomId);
-            info.setFanSpeed(fanSpeed);
-            // 风速改变可能影响优先级，重新尝试调度?
-            // 简化策略: 保持在等待队列，但在下一次调度检查时会使用新风速
-            roomRepository.save(room);
+            if (info.getFanSpeed() != fanSpeed) {
+                // 风速改变：从等待队列移除，重新请求（重置等待时间）
+                log.info("Fan speed changed for room {} in waiting queue, re-dispatching", roomId);
+                waitingQueue.remove(roomId);
+                dispatch(roomId, fanSpeed);
+            } else {
+                // 风速没变，仅更新目标温度等，不影响调度
+                roomRepository.save(room);
+            }
         } else {
             // 新请求
             room.setStatus(RoomStatus.WAITING); // 暂时设为WAITING，由dispatch决定
@@ -248,6 +262,13 @@ public class SchedulerService {
     }
 
     private void startService(String roomId, FanSpeed fanSpeed) {
+        // 容量保护：如果已经满，则把请求放回等待队列（以防并发导致超出容量）
+        if (serviceQueue.size() >= maxServiceUnits) {
+            addToWaitingQueue(roomId, fanSpeed, TIME_SLICE_LOGIC_SECONDS);
+            log.warn("StartService rejected (capacity full). Room {} moved to waiting", roomId);
+            return;
+        }
+
         // 从等待队列移除
         waitingQueue.remove(roomId);
 
@@ -274,6 +295,59 @@ public class SchedulerService {
 
         RoomStatus nextStatus = isPowerOff ? RoomStatus.SHUTDOWN : RoomStatus.IDLE;
         updateRoomStatus(roomId, nextStatus);
+
+        // 服务对象释放后，从等待队列中选择下一个合适的房间
+        // 如果当前 tick 正在处理服务队列，则延迟分配，待 tick 完成后统一分配
+        if (!deferAllocations) {
+            tryAllocateFromWaitingQueue();
+        }
+    }
+
+    /**
+     * 停止服务但不触发等待队列分配（用于风速改变重新调度的场景）
+     */
+    private void stopServiceWithoutAllocation(String roomId) {
+        ServiceUnit unit = serviceQueue.remove(roomId);
+        if (unit == null)
+            return;
+
+        // 生成详单
+        createBillingDetail(unit);
+
+        RoomStatus nextStatus = RoomStatus.IDLE;
+        updateRoomStatus(roomId, nextStatus);
+        // 注意：不调用 tryAllocateFromWaitingQueue()
+    }
+
+    /**
+     * 尝试从等待队列中分配下一个房间到服务队列
+     * 规则：优先级高的优先，同优先级选择累计等待时间最长的
+     */
+    private void tryAllocateFromWaitingQueue() {
+        if (waitingQueue.isEmpty() || serviceQueue.size() >= maxServiceUnits) {
+            return;
+        }
+
+        // 按优先级（风速）和累计等待时间排序
+        List<WaitingInfo> sortedWaiting = waitingQueue.values().stream()
+                .sorted((w1, w2) -> {
+                    int p1 = getPriority(w1.getFanSpeed());
+                    int p2 = getPriority(w2.getFanSpeed());
+                    if (p1 != p2) {
+                        return p2 - p1; // 降序：优先级高的在前
+                    }
+                    // 同优先级，选择累计等待时间最长的
+                    // (总等待时间长的，说明已经等得更久，应该优先获得服务)
+                    return Long.compare(w2.getTotalWaitedTime(), w1.getTotalWaitedTime());
+                })
+                .collect(Collectors.toList());
+
+        if (!sortedWaiting.isEmpty()) {
+            WaitingInfo next = sortedWaiting.getFirst();
+            log.info("Allocating from waiting queue: Room {} (priority {}, totalWaited={}s)",
+                    next.getRoomId(), getPriority(next.getFanSpeed()), next.getTotalWaitedTime());
+            startService(next.getRoomId(), next.getFanSpeed());
+        }
     }
 
     private void preempt(String kickedRoomId, String newRoomId, FanSpeed newFanSpeed) {
@@ -292,6 +366,7 @@ public class SchedulerService {
         info.setFanSpeed(fanSpeed);
         info.setTotalWaitTime(waitSeconds);
         info.setWaitTimeRemaining(waitSeconds);
+        info.setTotalWaitedTime(0); // 初始化为0，表示刚进入等待队列
         waitingQueue.put(roomId, info);
 
         updateRoomStatus(roomId, RoomStatus.WAITING);
@@ -318,18 +393,21 @@ public class SchedulerService {
         long duration = Duration.between(detail.getStartTime(), detail.getEndTime()).getSeconds();
         detail.setDuration(duration);
         detail.setFanSpeed(unit.getFanSpeed());
-        detail.setFee(unit.getCurrentFee());
+        // 将本次会话费用及累计费用四舍五入到两位后写入详单
+        double roundedSessionFee = Math.round(unit.getCurrentFee() * 100.0) / 100.0;
+        detail.setFee(roundedSessionFee);
 
         // 获取当前总费用（已经在服务过程中实时更新了）
         Room room = roomRepository.findByRoomId(unit.getRoomId()).orElseThrow();
-        // 总费用已经在服务过程中实时更新，这里直接使用当前总费用作为累计费用
         double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
+        // 将累计费用四舍五入用于账单记录与缓存展示
+        double roundedTotal = Math.round(currentTotal * 100.0) / 100.0;
         roomRepository.save(room);
-        
-        // 更新缓存（服务结束时，总费用已经包含了当前会话费用）
-        totalFeeCache.put(unit.getRoomId(), currentTotal);
 
-        detail.setCumulativeFee(currentTotal);
+        // 更新缓存（服务结束时，缓存以两位数显示）
+        totalFeeCache.put(unit.getRoomId(), roundedTotal);
+
+        detail.setCumulativeFee(roundedTotal);
         billingDetailRepository.save(detail);
     }
 
@@ -351,7 +429,7 @@ public class SchedulerService {
     // 每 1 秒执行一次 (模拟逻辑时间推进)
     @Scheduled(fixedRate = 1000)
     @Transactional
-    public void tick() {
+    public synchronized void tick() {
         // 计算逻辑时间流逝
         // timeScaleMs: 多少毫秒真实时间 = 1分钟逻辑时间 (默认10000ms = 10s)
         // 1s real = (60 / (timeScaleMs / 1000.0)) logic seconds
@@ -360,6 +438,8 @@ public class SchedulerService {
         double logicMinutesPassed = logicSecondsPassed / 60.0;
 
         // 1. 更新服务队列中的房间 (温度、费用)
+        // 在处理服务队列期间，延迟对等待队列的分配，避免 mid-tick 的不一致分配
+        deferAllocations = true;
         // 使用迭代器以安全删除
         Iterator<Map.Entry<String, ServiceUnit>> serviceIt = serviceQueue.entrySet().iterator();
         while (serviceIt.hasNext()) {
@@ -412,12 +492,23 @@ public class SchedulerService {
 
             info.setWaitTimeRemaining(info.getWaitTimeRemaining() - logicSecondsPassed);
 
+            // 更新累计等待时间（无论是否超时，都要累计）
+            info.setTotalWaitedTime(info.getTotalWaitedTime() + logicSecondsPassed);
+
             if (info.getWaitTimeRemaining() <= 0) {
                 // 时间片耗尽，触发调度检查
-                log.info("Time slice expired for Room {}", info.getRoomId());
+                log.info("Time slice expired for Room {} (totalWaited={}s)", info.getRoomId(),
+                        info.getTotalWaitedTime());
                 // 尝试获取服务
                 checkTimeSliceAllocation(info);
             }
+        }
+
+        // 等待队列倒计时与时间片检查完成后，允许进行分配（一次性分配多个空位）
+        deferAllocations = false;
+        // 如果有空位，尝试批量分配直到服务队列满或等待队列空
+        while (serviceQueue.size() < maxServiceUnits && !waitingQueue.isEmpty()) {
+            tryAllocateFromWaitingQueue();
         }
 
         // 3. 关机/空闲房间的回温逻辑
@@ -453,43 +544,54 @@ public class SchedulerService {
         }
 
         double tempChange = ratePerMin * logicMinutesPassed;
-        double currentTemp = room.getCurrentTemp();
+        double beforeTemp = room.getCurrentTemp();
         double targetTemp = room.getTargetTemp();
 
+        // 以实际（clamped）温差作为费用增量，避免靠近目标时多计费
+        double actualChange = 0.0;
         if (room.getMode() == Mode.COOL) {
-            currentTemp -= tempChange;
-            if (currentTemp <= targetTemp) {
-                currentTemp = targetTemp;
+            if (beforeTemp - tempChange <= targetTemp) {
+                // 本次 tick 会到达或超过目标，只计到达目标的实际温差
+                actualChange = Math.max(0.0, beforeTemp - targetTemp);
+                room.setCurrentTemp(targetTemp);
+                // 先记录费用，再停止服务（stopSupply 可能会移除 serviceQueue）
+                unit.setCurrentFee(unit.getCurrentFee() + actualChange);
+                double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
+                double newTotal = currentTotal + actualChange;
+                room.setTotalFee(newTotal);
                 // 达到目标温度，停止送风
                 stopSupply(roomId, false);
+            } else {
+                actualChange = tempChange;
+                room.setCurrentTemp(beforeTemp - actualChange);
+                unit.setCurrentFee(unit.getCurrentFee() + actualChange);
+                double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
+                room.setTotalFee(currentTotal + actualChange);
             }
         } else {
-            currentTemp += tempChange;
-            if (currentTemp >= targetTemp) {
-                currentTemp = targetTemp;
+            if (beforeTemp + tempChange >= targetTemp) {
+                actualChange = Math.max(0.0, targetTemp - beforeTemp);
+                room.setCurrentTemp(targetTemp);
+                unit.setCurrentFee(unit.getCurrentFee() + actualChange);
+                double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
+                room.setTotalFee(currentTotal + actualChange);
                 // 达到目标温度，停止送风
                 stopSupply(roomId, false);
+            } else {
+                actualChange = tempChange;
+                room.setCurrentTemp(beforeTemp + actualChange);
+                unit.setCurrentFee(unit.getCurrentFee() + actualChange);
+                double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
+                room.setTotalFee(currentTotal + actualChange);
             }
         }
-        room.setCurrentTemp(currentTemp);
 
-        // 计费: 1元/1度变化 (等效)
-        // 费用 = 温度变化量 * 1
-        double feeIncrement = tempChange * 1.0;
-        unit.setCurrentFee(unit.getCurrentFee() + feeIncrement);
-
-        // 实时更新总费用：将费用增量累加到总费用
-        double currentTotal = (room.getTotalFee() == null ? 0 : room.getTotalFee());
-        double newTotal = currentTotal + feeIncrement;
-        room.setTotalFee(newTotal);
-
-        // 格式化保留2位小数
+        // 保留温度两位小数以便展示，但不在此处对总费用进行截断或四舍五入
         room.setCurrentTemp(Math.round(room.getCurrentTemp() * 100.0) / 100.0);
-        double roundedTotal = Math.round(newTotal * 100.0) / 100.0;
-        room.setTotalFee(roundedTotal);
-        
-        // 同时更新内存缓存，确保实时读取
-        totalFeeCache.put(roomId, roundedTotal);
+
+        // 同时更新内存缓存，使用高精度值（不提前舍入）
+        double currentTotalForCache = (room.getTotalFee() == null ? 0 : room.getTotalFee());
+        totalFeeCache.put(roomId, currentTotalForCache);
 
         // 使用 saveAndFlush 确保立即刷新到数据库，避免读取延迟
         roomRepository.saveAndFlush(room);
@@ -561,24 +663,55 @@ public class SchedulerService {
     }
 
     private void checkTimeSliceAllocation(WaitingInfo waiter) {
-        // 简单的时间片轮转策略:
-        // 找到服务队列中同风速且服务时间最长的，如果它的服务时间 > 某个阈值 (比如也服务了一个时间片)，则替换
-        // 这里简化: 只要有同风速的，就替换服务时间最长的那个
+        // 时间片轮转策略（严格遵循风速优先级）:
+        // 1. 首先检查是否有低于等待房间风速的服务对象
+        // 2. 如果有，按优先级调度规则抢占（选择风速最低且服务时间最长的）
+        // 3. 如果没有（全是高优先级或同优先级），检查是否有同风速的
+        // 4. 如果有同风速的，替换服务时间最长的
+        // 5. 如果全是高优先级的，继续等待（风速优先级的绝对性）
 
+        int waiterPriority = getPriority(waiter.getFanSpeed());
+
+        // 查找所有低于等待房间风速的服务对象
+        List<ServiceUnit> lowerPriorityUnits = serviceQueue.values().stream()
+                .filter(u -> getPriority(u.getFanSpeed()) < waiterPriority)
+                .sorted((u1, u2) -> {
+                    int p1 = getPriority(u1.getFanSpeed());
+                    int p2 = getPriority(u2.getFanSpeed());
+                    if (p1 != p2)
+                        return p1 - p2; // 优先选择风速最低的
+                    return Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds()); // 再选服务时间最长的
+                })
+                .collect(Collectors.toList());
+
+        if (!lowerPriorityUnits.isEmpty()) {
+            // 有低优先级的，抢占
+            ServiceUnit toPreempt = lowerPriorityUnits.getFirst();
+            log.info("Time slice: {} (priority {}) preempts {} (priority {})",
+                    waiter.getRoomId(), waiterPriority, toPreempt.getRoomId(), getPriority(toPreempt.getFanSpeed()));
+            preempt(toPreempt.getRoomId(), waiter.getRoomId(), waiter.getFanSpeed());
+            return;
+        }
+
+        // 查找同风速的服务对象
         List<ServiceUnit> sameSpeedUnits = serviceQueue.values().stream()
                 .filter(u -> u.getFanSpeed() == waiter.getFanSpeed())
                 .sorted((u1, u2) -> Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds()))
                 .collect(Collectors.toList());
 
         if (!sameSpeedUnits.isEmpty()) {
+            // 有同风速的，时间片轮转
             ServiceUnit toReplace = sameSpeedUnits.getFirst();
-            // 替换
-            log.info("Time slice swap: {} replaces {}", waiter.getRoomId(), toReplace.getRoomId());
+            log.info("Time slice swap: {} replaces {} (same priority {})",
+                    waiter.getRoomId(), toReplace.getRoomId(), waiterPriority);
             preempt(toReplace.getRoomId(), waiter.getRoomId(), waiter.getFanSpeed());
         } else {
-            // 没有同风速的 (说明全是高优先级的?)
-            // 重置等待时间，继续等
-            waiter.setWaitTimeRemaining(waiter.getTotalWaitTime());
+            // 全是高优先级的，风速优先级绝对性：继续等待
+            // 不重置等待时间，继续累计等待时间，等待将来的服务机会
+            log.info("Room {} cannot preempt (all higher priority in service), continue waiting (totalWaited={}s)",
+                    waiter.getRoomId(), waiter.getTotalWaitedTime());
+            // 注意：不调用 setWaitTimeRemaining()，保持当前状态
+            // totalWaitedTime 会在 tick() 中继续累计
         }
     }
 
@@ -600,21 +733,21 @@ public class SchedulerService {
         }
         return unit.getCurrentFee();
     }
-    
+
     /**
      * 获取缓存中的总费用（实时更新）
      */
     public Double getCachedTotalFee(String roomId) {
         return totalFeeCache.get(roomId);
     }
-    
+
     /**
      * 更新总费用缓存
      */
     public void updateTotalFeeCache(String roomId, double totalFee) {
         totalFeeCache.put(roomId, totalFee);
     }
-    
+
     /**
      * 清除总费用缓存（用于入住/退房时）
      */

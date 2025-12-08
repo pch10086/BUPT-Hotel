@@ -26,3 +26,5 @@ logs/
 *.log
 
 prompt.md
+tests/
+resources/
