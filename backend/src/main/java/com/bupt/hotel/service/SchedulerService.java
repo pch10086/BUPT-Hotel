@@ -83,6 +83,7 @@ public class SchedulerService {
         private long waitTimeRemaining; // 剩余等待时间(逻辑秒)
         private long totalWaitTime; // 分配的等待时间（每个时间片 = 120秒）
         private long totalWaitedTime; // 累计已等待时间(逻辑秒)，用于比较优先级
+        private boolean priorityBoosted; // 是否因为等待超过时间片而被提升优先级（用于 UI 展示）
     }
 
     @Data
@@ -236,7 +237,10 @@ public class SchedulerService {
                     if (p1 != p2)
                         return p1 - p2; // 升序: LOW < MIDDLE < HIGH
                     // 同风速，服务时间长的排前面 (容易被踢)
-                    return Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds());
+                    int cmp = Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds());
+                    if (cmp != 0)
+                        return cmp;
+                    return compareRoomIdAsc(u1.getRoomId(), u2.getRoomId());
                 })
                 .collect(Collectors.toList());
 
@@ -328,17 +332,31 @@ public class SchedulerService {
             return;
         }
 
-        // 按优先级（风速）和累计等待时间排序
+        // 按基础风速优先（不可被等待提升跨越）；在相同风速下，
+        // 如果累计等待时间超过时间片则在同风速内提升优先级。最终以累计等待时间和 roomId 做稳定排序。
         List<WaitingInfo> sortedWaiting = waitingQueue.values().stream()
                 .sorted((w1, w2) -> {
-                    int p1 = getPriority(w1.getFanSpeed());
-                    int p2 = getPriority(w2.getFanSpeed());
-                    if (p1 != p2) {
-                        return p2 - p1; // 降序：优先级高的在前
+                    // 先比较基础风速优先级（HIGH > MIDDLE > LOW）——这是绝对性的
+                    int base1 = getPriority(w1.getFanSpeed());
+                    int base2 = getPriority(w2.getFanSpeed());
+                    if (base1 != base2) {
+                        return base2 - base1; // 降序：风速高的在前
                     }
-                    // 同优先级，选择累计等待时间最长的
-                    // (总等待时间长的，说明已经等得更久，应该优先获得服务)
-                    return Long.compare(w2.getTotalWaitedTime(), w1.getTotalWaitedTime());
+
+                    // 到此说明风速相同：在相同风速内，等待超过时间片的会获得提升
+                    boolean boosted1 = w1.getTotalWaitedTime() >= TIME_SLICE_LOGIC_SECONDS;
+                    boolean boosted2 = w2.getTotalWaitedTime() >= TIME_SLICE_LOGIC_SECONDS;
+                    if (boosted1 != boosted2) {
+                        return boosted2 ? -1 : 1; // boosted 的排在前面
+                    }
+
+                    // 同风速、同提升状态：按累计等待时间降序
+                    int waitedCmp = Long.compare(w2.getTotalWaitedTime(), w1.getTotalWaitedTime());
+                    if (waitedCmp != 0)
+                        return waitedCmp;
+
+                    // 最后以房间号升序作为稳定的 tie-break
+                    return compareRoomIdAsc(w1.getRoomId(), w2.getRoomId());
                 })
                 .collect(Collectors.toList());
 
@@ -367,6 +385,7 @@ public class SchedulerService {
         info.setTotalWaitTime(waitSeconds);
         info.setWaitTimeRemaining(waitSeconds);
         info.setTotalWaitedTime(0); // 初始化为0，表示刚进入等待队列
+        info.setPriorityBoosted(false);
         waitingQueue.put(roomId, info);
 
         updateRoomStatus(roomId, RoomStatus.WAITING);
@@ -422,6 +441,16 @@ public class SchedulerService {
             default:
                 return 0;
         }
+    }
+
+    private int compareRoomIdAsc(String r1, String r2) {
+        if (r1 == null && r2 == null)
+            return 0;
+        if (r1 == null)
+            return -1;
+        if (r2 == null)
+            return 1;
+        return r1.compareTo(r2);
     }
 
     // --- 定时任务: 模拟时间流逝、温度变化、计费、时间片检查 ---
@@ -490,16 +519,20 @@ public class SchedulerService {
                 }
             }
 
-            info.setWaitTimeRemaining(info.getWaitTimeRemaining() - logicSecondsPassed);
+            long prevRem = info.getWaitTimeRemaining();
+            long dec = Math.min(prevRem, logicSecondsPassed);
+            info.setWaitTimeRemaining(prevRem - dec);
 
-            // 更新累计等待时间（无论是否超时，都要累计）
-            info.setTotalWaitedTime(info.getTotalWaitedTime() + logicSecondsPassed);
+            // 更新累计等待时间（包括已经超时后的继续累计），用于优先级调整
+            long newTotalWaited = info.getTotalWaitedTime() + logicSecondsPassed;
+            info.setTotalWaitedTime(newTotalWaited);
+            // 更新 priorityBoosted 标志以便 UI 显示
+            info.setPriorityBoosted(newTotalWaited >= TIME_SLICE_LOGIC_SECONDS);
 
-            if (info.getWaitTimeRemaining() <= 0) {
-                // 时间片耗尽，触发调度检查
+            // 仅当刚好从>0 到 0 时触发一次时间片耗尽检查，避免重复调用导致竞态
+            if (prevRem > 0 && info.getWaitTimeRemaining() == 0) {
                 log.info("Time slice expired for Room {} (totalWaited={}s)", info.getRoomId(),
                         info.getTotalWaitedTime());
-                // 尝试获取服务
                 checkTimeSliceAllocation(info);
             }
         }
@@ -671,16 +704,20 @@ public class SchedulerService {
         // 5. 如果全是高优先级的，继续等待（风速优先级的绝对性）
 
         int waiterPriority = getPriority(waiter.getFanSpeed());
-
+        // 如果等待者等待已经超过时间片，则视为提升一级优先
+        int effectivePriority = waiterPriority + (waiter.getTotalWaitedTime() >= TIME_SLICE_LOGIC_SECONDS ? 1 : 0);
         // 查找所有低于等待房间风速的服务对象
         List<ServiceUnit> lowerPriorityUnits = serviceQueue.values().stream()
-                .filter(u -> getPriority(u.getFanSpeed()) < waiterPriority)
+                .filter(u -> getPriority(u.getFanSpeed()) < effectivePriority)
                 .sorted((u1, u2) -> {
                     int p1 = getPriority(u1.getFanSpeed());
                     int p2 = getPriority(u2.getFanSpeed());
                     if (p1 != p2)
                         return p1 - p2; // 优先选择风速最低的
-                    return Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds()); // 再选服务时间最长的
+                    int cmp = Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds()); // 再选服务时间最长的
+                    if (cmp != 0)
+                        return cmp;
+                    return compareRoomIdAsc(u1.getRoomId(), u2.getRoomId());
                 })
                 .collect(Collectors.toList());
 
@@ -696,7 +733,12 @@ public class SchedulerService {
         // 查找同风速的服务对象
         List<ServiceUnit> sameSpeedUnits = serviceQueue.values().stream()
                 .filter(u -> u.getFanSpeed() == waiter.getFanSpeed())
-                .sorted((u1, u2) -> Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds()))
+                .sorted((u1, u2) -> {
+                    int cmp = Long.compare(u2.getServedDurationSeconds(), u1.getServedDurationSeconds());
+                    if (cmp != 0)
+                        return cmp;
+                    return compareRoomIdAsc(u1.getRoomId(), u2.getRoomId());
+                })
                 .collect(Collectors.toList());
 
         if (!sameSpeedUnits.isEmpty()) {
