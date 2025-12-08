@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
+    #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 酒店空调系统自动化测试脚本
 根据测试用例自动执行空调操作（开机、关机、调温、调风速等）
+支持制冷模式和制热模式测试
 
 注意：
 - 此脚本只执行测试用例中的空调操作
@@ -14,6 +15,7 @@
 import requests
 import time
 import json
+import sys
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -56,11 +58,12 @@ class TestOperation:
 
 
 class TestScript:
-    def __init__(self, api_base_url: str = API_BASE_URL):
+    def __init__(self, api_base_url: str = API_BASE_URL, mode: str = "COOL"):
         self.api_base_url = api_base_url
         self.session = requests.Session()
         self.token = None
         self.results = []
+        self.mode = mode  # 测试模式：COOL 或 HEAT
         
     # 注意：当前API不需要认证，所以不需要登录
     # 注意：办理入住和结账由用户手动操作，脚本不包含这些功能
@@ -145,7 +148,8 @@ class TestScript:
                 room_id=room_id,
                 operation_type=OperationType.POWER_ON,
                 target_temp=25.0,  # 默认温度
-                fan_speed="MIDDLE"  # 默认风速
+                fan_speed="MIDDLE",  # 默认风速
+                mode=self.mode
             )
         
         # 关机
@@ -156,9 +160,11 @@ class TestScript:
                 operation_type=OperationType.POWER_OFF
             )
         
-        # 设置温度和风速 "18, 高"
-        if "," in value:
-            parts = [p.strip() for p in value.split(",")]
+        # 设置温度和风速 "18, 高" 或 "28，高"
+        if "," in value or "，" in value:
+            # 兼容中英文逗号
+            separator = "," if "," in value else "，"
+            parts = [p.strip() for p in value.split(separator)]
             temp = float(parts[0])
             fan = parts[1] if len(parts) > 1 else "MIDDLE"
             return TestOperation(
@@ -220,7 +226,8 @@ class TestScript:
                 # 如果是非法请求，失败才是正确的
                 success = not success
                 msg = "预期失败，实际失败" if not success else "预期失败，但成功了（错误）"
-            print(f" - {msg}")
+            mode_text = "制冷模式" if op.mode == "COOL" else "制热模式"
+            print(f" ({mode_text}) - {msg}")
             return success, msg
         
         elif op.operation_type == OperationType.POWER_OFF:
@@ -267,8 +274,9 @@ class TestScript:
         注意：此脚本只执行测试用例中的空调操作，不包含办理入住和结账
         请在运行脚本前手动办理房间入住，测试完成后手动结账
         """
+        mode_text = "制冷模式" if self.mode == "COOL" else "制热模式"
         print("=" * 60)
-        print("开始执行测试用例")
+        print(f"开始执行测试用例 - {mode_text}")
         print("=" * 60)
         print("⚠️  重要提示：请确保5个房间（101-105）已办理入住！")
         print("⚠️  此脚本只执行测试用例中的空调操作，不包含办理入住和结账功能")
@@ -370,7 +378,7 @@ def load_test_case_from_text():
     # 例如：时间点0立即执行，时间点1在10秒后执行，时间点2在20秒后执行
     test_data = [
         ["0", "开机", "", "", "", ""],  # 时间0分钟：房间1开机
-        ["1", "18", "开机", "", "", ""],  # 时间1分钟：房间1设18℃，房间2开机
+        ["1", "18", "开机", "", "", "开机"],  # 时间1分钟：房间1设18℃，房间2,5开机
         ["2", "", "", "开机", "", ""],  # 时间2分钟：房间3开机
         ["3", "", "19", "", "开机", ""],  # 时间3分钟：房间2设19℃，房间4开机
         ["4", "", "", "", "", "22"],  # 时间4分钟：房间5设22℃
@@ -378,7 +386,7 @@ def load_test_case_from_text():
         ["6", "", "关机", "", "", ""],  # 时间6分钟：房间2关机
         ["7", "", "开机", "", "", "高"],  # 时间7分钟：房间2开机，房间5设高风
         ["8", "", "", "", "", ""],  # 时间8分钟：无操作
-        ["9", "22", "", "18, 高", "", ""],  # 时间9分钟：房间1设22℃，房间3设18℃高风
+        ["9", "22", "", "", "18, 高", ""],  # 时间9分钟：房间1设22℃，房间4设18℃高风
         ["10", "", "", "", "", ""],  # 时间10分钟：无操作
         ["11", "", "22", "", "", ""],  # 时间11分钟：房间2设22℃
         ["12", "", "", "", "", "低"],  # 时间12分钟：房间5设低风
@@ -399,15 +407,70 @@ def load_test_case_from_text():
     return test_data
 
 
+def load_test_case_heat():
+    """加载制热模式测试用例"""
+    test_data = [
+        ["0", "开机", "", "", "", ""],  # 时间0分钟：房间1开机
+        ["1", "24", "开机", "", "", ""],  # 时间1分钟：房间1设24℃，房间2开机
+        ["2", "", "", "开机", "", ""],  # 时间2分钟：房间3开机
+        ["3", "", "25", "", "开机", "开机"],  # 时间3分钟：房间2设25℃，房间4,5开机
+        ["4", "", "", "27", "", "高"],  # 时间4分钟：房间3设27℃，房间5设高风
+        ["5", "高", "", "", "", ""],  # 时间5分钟：房间1设高风
+        ["6", "", "", "", "", ""],  # 时间6分钟：无操作
+        ["7", "", "", "", "", "24"],  # 时间7分钟：房间5设24℃
+        ["8", "", "", "", "", ""],  # 时间8分钟：无操作
+        ["9", "28", "", "", "28, 高", ""],  # 时间9分钟：房间1设28℃，房间4设28℃高风
+        ["10", "", "", "", "", ""],  # 时间10分钟：无操作
+        ["11", "", "", "", "", "中"],  # 时间11分钟：房间5设中风
+        ["12", "", "高", "", "", ""],  # 时间12分钟：房间2设高风
+        ["13", "", "", "", "", ""],  # 时间13分钟：无操作
+        ["14", "关机", "", "低", "", ""],  # 时间14分钟：房间1关机，房间3设低风
+        ["15", "", "", "", "", ""],  # 时间15分钟：无操作
+        ["16", "", "", "", "", "关机"],  # 时间16分钟：房间5关机
+        ["17", "", "", "高", "", ""],  # 时间17分钟：房间3设高风
+        ["18", "开机", "", "", "25, 中", ""],  # 时间18分钟：房间1开机，房间4设25℃中风
+        ["19", "", "", "", "", ""],  # 时间19分钟：无操作
+        ["20", "", "27, 中", "", "", "开机"],  # 时间20分钟：房间2设27℃中风，房间5开机
+        ["21", "", "", "", "", ""],  # 时间21分钟：无操作
+        ["22", "", "", "", "", ""],  # 时间22分钟：无操作
+        ["23", "", "", "", "", ""],  # 时间23分钟：无操作
+        ["24", "关机", "", "关机", "", "关机"],  # 时间24分钟：房间1,3,5关机
+        ["25", "", "关机", "", "关机", ""],  # 时间25分钟：房间2,4关机
+    ]
+    return test_data
+
+
 if __name__ == "__main__":
     print("酒店空调系统自动化测试脚本")
     print("=" * 60)
     
-    # 加载测试用例
-    test_data = load_test_case_from_text()
+    # 检查命令行参数
+    mode = "COOL"  # 默认制冷模式
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].upper()
+        if arg in ["COOL", "HEAT", "制冷", "制热"]:
+            mode = "COOL" if arg in ["COOL", "制冷"] else "HEAT"
+        else:
+            print("使用方法：")
+            print("  python test_script.py           # 默认制冷模式")
+            print("  python test_script.py cool      # 制冷模式")
+            print("  python test_script.py heat      # 制热模式")
+            print("  python test_script.py 制冷       # 制冷模式")
+            print("  python test_script.py 制热       # 制热模式")
+            sys.exit(1)
+    
+    # 加载对应模式的测试用例
+    if mode == "COOL":
+        test_data = load_test_case_from_text()
+        print("当前测试模式：制冷模式 (COOL)")
+    else:
+        test_data = load_test_case_heat()
+        print("当前测试模式：制热模式 (HEAT)")
+    
+    print("=" * 60)
     
     # 创建测试脚本实例
-    script = TestScript(API_BASE_URL)
+    script = TestScript(API_BASE_URL, mode=mode)
     
     # 运行测试
     script.run_test_case(test_data)
