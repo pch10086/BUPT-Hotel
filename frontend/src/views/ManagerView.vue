@@ -374,7 +374,7 @@ const formatFanStats = (statsMap) => {
 
 onMounted(() => {
   fetchData();
-  timer = setInterval(fetchData, 1000);
+  timer = setInterval(fetchData, 500);
   clockTimer = setInterval(() => {
     currentTime.value = new Date().toLocaleTimeString();
   }, 1000);

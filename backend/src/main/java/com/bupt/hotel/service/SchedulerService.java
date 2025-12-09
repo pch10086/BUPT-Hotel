@@ -475,10 +475,6 @@ public class SchedulerService {
         }
     }
 
-    private Room findRoom(String roomId) {
-        return roomRepository.findByRoomId(roomId).orElse(null);
-    }
-
     private int compareRoomIdAsc(String r1, String r2) {
         if (r1 == null && r2 == null)
             return 0;
@@ -638,10 +634,11 @@ public class SchedulerService {
         // 这个检查保证在真实时间（每秒）上不会出现可抢占却未抢占的情况。
         enforceNoMissedPreemptions();
 
-        // 3. 关机/空闲房间的回温逻辑
+        // 3. 关机/空闲/等待房间的回温逻辑
         List<Room> allRooms = roomRepository.findAll();
         for (Room room : allRooms) {
-            if (room.getStatus() == RoomStatus.SHUTDOWN || room.getStatus() == RoomStatus.IDLE) {
+            if (room.getStatus() == RoomStatus.SHUTDOWN || room.getStatus() == RoomStatus.IDLE
+                    || room.getStatus() == RoomStatus.WAITING) {
                 handleTemperatureRecovery(room, logicMinutesPassed);
             }
         }
@@ -652,14 +649,30 @@ public class SchedulerService {
         if (room == null)
             return;
 
+        double beforeTemp = room.getCurrentTemp();
+        double targetTemp = room.getTargetTemp();
+
+        // 修复：如果当前温度已经满足目标温度（例如用户调整了目标温度导致当前温度“过头”），
+        // 则不应强制将温度设置为目标温度，而是直接停止服务，让其自然回温。
+        if (room.getMode() == Mode.COOL && beforeTemp <= targetTemp) {
+            log.info("Room {} temp {} is already below/equal target {}, stopping service without snapping.", roomId,
+                    beforeTemp, targetTemp);
+            stopSupply(roomId, false);
+            return;
+        }
+        if (room.getMode() == Mode.HEAT && beforeTemp >= targetTemp) {
+            log.info("Room {} temp {} is already above/equal target {}, stopping service without snapping.", roomId,
+                    beforeTemp, targetTemp);
+            stopSupply(roomId, false);
+            return;
+        }
+
         // 计算本次实际服务消耗的逻辑秒数（在到达目标温度时需要按比例计算）
         long actualServedSeconds = 0L;
 
         // 温度变化
         double ratePerMin = getRatePerMin(unit.getFanSpeed());
         double tempChange = ratePerMin * logicMinutesPassed;
-        double beforeTemp = room.getCurrentTemp();
-        double targetTemp = room.getTargetTemp();
 
         // 以实际（clamped）温差作为费用增量，避免靠近目标时多计费
         double actualChange = 0.0;
@@ -745,8 +758,8 @@ public class SchedulerService {
             initial = room.getInitialTempHeat() != null ? room.getInitialTempHeat() : room.getInitialTemp();
         }
 
-        if (room.getStatus() == RoomStatus.SHUTDOWN) {
-            // 关机状态：趋向对应模式下的初始温度
+        if (room.getStatus() == RoomStatus.SHUTDOWN || room.getStatus() == RoomStatus.WAITING) {
+            // 关机或等待状态：趋向对应模式下的初始温度
             if (Math.abs(current - initial) < recoveryRate) {
                 current = initial;
             } else if (current > initial) {
