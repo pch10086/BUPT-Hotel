@@ -129,6 +129,13 @@ public class BillingService {
         sb.append("=== 空调详单 ===\n");
         sb.append("房间号,请求时间,服务开始时间,服务结束时间,服务时长(s),风速,当前费用,累积费用\n");
         for (BillingDetail d : details) {
+            long logicDuration = d.getDuration() != null ? d.getDuration() : 0L;
+            long displayDuration = timeService.logicSecondsToRealSeconds(logicDuration);
+            // 跳过显示时长为 0 的条目
+            if (displayDuration == 0L) {
+                continue;
+            }
+
             String reqTime = d.getRequestTime() != null ? d.getRequestTime().format(formatter) : "";
             String startTime = d.getStartTime() != null ? d.getStartTime().format(formatter) : "";
             String endTime = d.getEndTime() != null ? d.getEndTime().format(formatter) : "";
@@ -137,7 +144,7 @@ public class BillingService {
                     .append("=\"").append(reqTime).append("\",")
                     .append("=\"").append(startTime).append("\",")
                     .append("=\"").append(endTime).append("\",")
-                    .append(d.getDuration()).append(",")
+                    .append(displayDuration).append(",")
                     .append(d.getFanSpeed()).append(",")
                     .append(String.format("%.2f", d.getFee())).append(",")
                     .append(String.format("%.2f", d.getCumulativeFee())).append("\n");

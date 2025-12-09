@@ -110,6 +110,10 @@ public class ClerkController {
     public List<BillingDetailView> getDetails(@RequestParam String roomId) {
         return billingService.getDetails(roomId)
                 .stream()
+                .filter(d -> {
+                    long logicDuration = d.getDuration() != null ? d.getDuration() : 0L;
+                    return timeService.logicSecondsToRealSeconds(logicDuration) > 0L;
+                })
                 .map(this::toBillingDetailView)
                 .collect(Collectors.toList());
     }
