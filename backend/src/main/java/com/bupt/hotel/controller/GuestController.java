@@ -6,6 +6,8 @@ import com.bupt.hotel.entity.Room;
 import com.bupt.hotel.repository.RoomRepository;
 import com.bupt.hotel.service.SchedulerService;
 import lombok.Data;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,6 +26,8 @@ public class GuestController {
     @Autowired
     private RoomRepository roomRepository;
 
+    private static final Logger logger = LoggerFactory.getLogger(GuestController.class);
+
     @Data
     public static class PowerOnRequest {
         private String roomId;
@@ -40,7 +44,7 @@ public class GuestController {
     }
 
     @PostMapping("/powerOn")
-    public Room powerOn(@RequestBody PowerOnRequest req) {
+    public java.util.Map<String, Object> powerOn(@RequestBody PowerOnRequest req) {
         Room room = roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
 
         // 验证：只有已入住的房间才能开机
@@ -53,6 +57,8 @@ public class GuestController {
         // 当请求中未提供 targetTemp 时，使用模式对应的缺省目标温度：制冷=25℃，制热=23℃（与 prompt.md 规范一致）
         Double providedTarget = req.getTargetTemp();
         Double targetToUse;
+        boolean tempInvalid = false;
+        String warning = null;
         if (providedTarget == null) {
             if (req.getMode() == Mode.HEAT) {
                 targetToUse = 23.0;
@@ -61,6 +67,23 @@ public class GuestController {
             }
         } else {
             targetToUse = providedTarget;
+        }
+
+        // 验证目标温度是否在允许范围内（若有提供或使用缺省值）
+        try {
+            validateTargetTemp(req.getMode(), targetToUse);
+        } catch (IllegalArgumentException ex) {
+            // 忽略非法目标温度，但仍按用户选择的风速开机
+            tempInvalid = true;
+            warning = ex.getMessage();
+            logger.warn("Ignored invalid target temp during powerOn for room {}: {}", req.getRoomId(), ex.getMessage());
+            // 选择一个安全的 targetToUse：优先使用房间已有目标，否则使用模式默认
+            Room existing = roomRepository.findByRoomId(req.getRoomId()).orElse(null);
+            if (existing != null && existing.getTargetTemp() != null) {
+                targetToUse = existing.getTargetTemp();
+            } else {
+                targetToUse = (req.getMode() == Mode.HEAT) ? 23.0 : 25.0;
+            }
         }
 
         // 如果用户选择的模式与数据库中当前模式不同，立即把 currentTemp 设置为对应模式的初始温度，
@@ -85,7 +108,12 @@ public class GuestController {
         updated.setIsOn(true);
         roomRepository.save(updated);
 
-        return roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("room", roomRepository.findByRoomId(req.getRoomId()).orElseThrow());
+        if (tempInvalid) {
+            resp.put("warning", warning);
+        }
+        return resp;
     }
 
     @PostMapping("/powerOff")
@@ -106,7 +134,7 @@ public class GuestController {
     }
 
     @PostMapping("/changeState")
-    public Room changeState(@RequestBody ControlRequest req) {
+    public java.util.Map<String, Object> changeState(@RequestBody ControlRequest req) {
         Room room = roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
 
         // 验证：只有已入住的房间才能调整状态
@@ -114,16 +142,76 @@ public class GuestController {
             throw new RuntimeException("房间未办理入住，无法调整状态");
         }
 
-        if (!room.getIsOn()) {
-            throw new RuntimeException("Room is OFF");
+        // changeState 需要房间已设置模式（mode），否则无法确定校验范围
+        if (room.getMode() == null) {
+            throw new RuntimeException("房间当前未设置模式，无法调整状态");
         }
-        // 只有风速改变才触发重新调度，温度改变只更新参数
-        schedulerService.requestSupply(req.getRoomId(), room.getMode(), req.getTargetTemp(), req.getFanSpeed());
-        return roomRepository.findByRoomId(req.getRoomId()).orElseThrow();
+
+        Double providedTarget = req.getTargetTemp();
+        Double targetToUse = null;
+        boolean tempInvalid = false;
+        String warning = null;
+
+        // If provided target is invalid, we should IGNORE the target change but still
+        // process fanSpeed.
+        if (providedTarget != null) {
+            try {
+                // validate against the room's current mode
+                validateTargetTemp(room.getMode(), providedTarget);
+                targetToUse = providedTarget;
+            } catch (IllegalArgumentException ex) {
+                tempInvalid = true;
+                warning = ex.getMessage();
+                logger.warn("Ignored invalid target temp for room {}: {}", req.getRoomId(), ex.getMessage());
+            }
+        }
+
+        // Determine a final target to pass to scheduler: prefer provided valid target,
+        // then room.targetTemp, then defaults
+        if (targetToUse == null) {
+            targetToUse = room.getTargetTemp();
+            if (targetToUse == null) {
+                if (room.getMode() == Mode.HEAT) {
+                    targetToUse = 23.0;
+                } else {
+                    targetToUse = 25.0;
+                }
+            }
+        }
+
+        // Call scheduler with the room's current mode (changeState shouldn't change
+        // mode)
+        schedulerService.requestSupply(req.getRoomId(), room.getMode(), targetToUse, req.getFanSpeed());
+
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("room", roomRepository.findByRoomId(req.getRoomId()).orElseThrow());
+        if (tempInvalid) {
+            resp.put("warning", warning);
+        }
+        return resp;
     }
 
     @GetMapping("/status")
     public Room getStatus(@RequestParam String roomId) {
         return roomRepository.findByRoomId(roomId).orElseThrow();
+    }
+
+    /**
+     * Validate that target temperature falls within allowed ranges for the given
+     * mode.
+     * If target is null, validation is skipped (caller may supply a default later).
+     */
+    private void validateTargetTemp(Mode mode, Double target) {
+        if (target == null)
+            return;
+        if (mode == Mode.COOL) {
+            if (target < 18.0 || target > 28.0) {
+                throw new IllegalArgumentException("Cooling target temp must be between 18 and 28");
+            }
+        } else if (mode == Mode.HEAT) {
+            if (target < 18.0 || target > 25.0) {
+                throw new IllegalArgumentException("Heating target temp must be between 18 and 25");
+            }
+        }
     }
 }
