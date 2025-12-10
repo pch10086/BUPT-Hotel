@@ -109,6 +109,7 @@ import { ElMessage } from "element-plus";
 import { User, Service, Monitor, Lock } from "@element-plus/icons-vue";
 import { useAuthStore } from "@/stores/auth";
 import { getAllowedRoles } from "@/config/env";
+import api from "@/api";
 
 const router = useRouter();
 const loginFormRef = ref(null);
@@ -156,7 +157,7 @@ const hintTitle = computed(() => {
 const hintDescription = computed(() => {
   if (!loginForm.role) return "";
   const hints = {
-    guest: "客户账号：guest，密码：123456",
+    guest: "客户账号：请输入房间号，密码：123456",
     clerk: "前台账号：clerk，密码：123456",
     manager: "经理账号：manager，密码：admin123",
   };
@@ -178,14 +179,42 @@ const handleLogin = async () => {
     loading.value = true;
 
     // 模拟登录验证
-    setTimeout(() => {
-      const account = accounts[loginForm.role];
+    // setTimeout(async () => { // 改为 async 立即执行，不使用 setTimeout 模拟延迟，因为有真实请求
+    (async () => {
+      let isValid = false;
+      
+      if (loginForm.role === 'guest') {
+        // 客户角色：只要密码正确，账号即为房间号
+        if (loginForm.password === '123456') {
+          // 增加校验：检查房间是否已入住
+          try {
+            const res = await api.get("/manager/rooms");
+            const rooms = res.data;
+            const targetRoom = rooms.find(r => r.roomId === loginForm.username);
+            
+            if (targetRoom && targetRoom.customerName) {
+              isValid = true;
+            } else {
+              ElMessage.error("该房间未办理入住，无法登录");
+              loading.value = false;
+              return;
+            }
+          } catch (e) {
+            console.error("验证房间状态失败", e);
+            ElMessage.error("连接服务器失败，请检查网络");
+            loading.value = false;
+            return;
+          }
+        }
+      } else {
+        // 其他角色：验证固定账号密码
+        const account = accounts[loginForm.role];
+        if (account && account.username === loginForm.username && account.password === loginForm.password) {
+          isValid = true;
+        }
+      }
 
-      if (
-        account &&
-        account.username === loginForm.username &&
-        account.password === loginForm.password
-      ) {
+      if (isValid) {
         // 登录成功，保存认证信息
         const authStore = useAuthStore();
         authStore.login({
@@ -204,10 +233,12 @@ const handleLogin = async () => {
 
         router.push(routes[loginForm.role]);
       } else {
-        ElMessage.error("账号或密码错误");
+        if (!isValid) { // 避免重复提示
+             ElMessage.error("账号或密码错误");
+        }
         loading.value = false;
       }
-    }, 500);
+    })();
   });
 };
 </script>

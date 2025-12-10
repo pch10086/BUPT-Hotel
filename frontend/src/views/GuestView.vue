@@ -5,20 +5,21 @@
       <h2>客房空调控制系统</h2>
     </div>
 
-    <!-- 如果没有已入住的房间，显示提示 -->
+    <!-- 如果没有找到当前房间信息，显示提示 -->
     <el-empty 
-      v-if="sortedRooms.length === 0" 
-      description="暂无已入住的房间，请先在前台办理入住"
+      v-if="!currentRoom" 
+      :description="currentRoomId ? `未找到房间 ${currentRoomId} 的信息，请确认是否已办理入住` : '请先登录'"
       :image-size="120"
     />
     
-    <div v-else class="rooms-grid">
+    <div v-else class="rooms-grid" style="display: flex; justify-content: center;">
       <el-card
-        v-for="room in sortedRooms"
+        v-for="room in [currentRoom]"
         :key="room.roomId"
         class="room-card"
         :class="{ 'is-on': room.isOn }"
         shadow="hover"
+        style="max-width: 400px; width: 100%;"
       >
         <template #header>
           <div class="card-header">
@@ -99,11 +100,11 @@
             </div>
             <div class="metric-item">
               <div class="m-label">总费用</div>
-              <div class="m-value fee">¥{{ room.totalFee?.toFixed(1) }}</div>
+              <div class="m-value fee">¥{{ room.totalFee?.toFixed(2) }}</div>
             </div>
             <div class="metric-item">
               <div class="m-label">本次费用</div>
-              <div class="m-value fee">¥{{ room.currentSessionFee?.toFixed(1) || '0.0' }}</div>
+              <div class="m-value fee">¥{{ room.currentSessionFee?.toFixed(2) || '0.00' }}</div>
             </div>
             <div class="metric-item">
               <div class="m-label">模式</div>
@@ -171,16 +172,22 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import api from "@/api";
 import { ElMessage } from "element-plus";
 import { House, SwitchButton } from "@element-plus/icons-vue";
+import { useAuthStore } from "@/stores/auth";
+import { useRouter } from "vue-router";
+
+const router = useRouter();
+const authStore = useAuthStore();
+const currentUser = authStore.getCurrentUser();
+const currentRoomId = currentUser?.username;
 
 const rooms = ref([]);
 const localControls = ref({}); // 存储每个房间的表单状态 { roomId: { mode, targetTemp, fanSpeed } }
 let timer = null;
 
-// 只显示已办理入住的房间（有customerName的房间），并按ID排序
-const sortedRooms = computed(() => {
-  return [...rooms.value]
-    .filter(room => room.customerName) // 只显示已入住的房间
-    .sort((a, b) => a.roomId.localeCompare(b.roomId));
+// 获取当前登录用户的房间信息
+const currentRoom = computed(() => {
+  if (!currentRoomId) return null;
+  return rooms.value.find(room => room.roomId === currentRoomId);
 });
 
 // 获取或初始化本地控制状态
@@ -212,6 +219,17 @@ const fetchStatus = async () => {
     // 使用管理员接口获取所有房间状态，效率更高
     const res = await api.get("/manager/rooms");
     rooms.value = res.data;
+
+    // 检查当前房间是否已退房
+    if (currentRoomId) {
+      const myRoom = rooms.value.find(r => r.roomId === currentRoomId);
+      if (!myRoom || !myRoom.customerName) {
+        // 房间不存在或已退房
+        ElMessage.warning("您已退房，自动退出登录");
+        authStore.logout();
+        router.push("/login");
+      }
+    }
   } catch (e) {
     console.error("Fetch status failed", e);
   }

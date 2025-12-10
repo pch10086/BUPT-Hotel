@@ -9,7 +9,15 @@ const getBaseURL = () => {
     if (import.meta.env.VITE_API_BASE_URL) {
         return import.meta.env.VITE_API_BASE_URL;
     }
-    // 默认使用 localhost（开发环境或服务器端）
+    
+    // 智能判断：如果当前是通过IP访问的（非localhost），则假设后端也在同一个IP上
+    // 这样在局域网测试时，客户端浏览器会自动连接到服务器IP的8080端口
+    const hostname = window.location.hostname;
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        return `http://${hostname}:8080/api`;
+    }
+
+    // 默认使用 localhost（本机开发）
     return 'http://localhost:8080/api';
 };
 
