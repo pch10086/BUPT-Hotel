@@ -5,11 +5,18 @@
 
 const APP_MODE = import.meta.env.VITE_APP_MODE || 'server'; // 默认为服务器端模式
 
-export const isServerMode = () => APP_MODE === 'server';
-export const isClientMode = () => APP_MODE === 'client';
+// 判断是否通过 localhost 或 127.0.0.1 访问
+const isLocalAccess = () => {
+  const hostname = window.location.hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+};
+
+export const isServerMode = () => APP_MODE === 'server' && isLocalAccess();
+export const isClientMode = () => APP_MODE === 'client' || !isLocalAccess();
 
 // 获取允许的角色列表
 export const getAllowedRoles = () => {
+  // 如果是显式的客户端模式，或者是非本地访问（即其他机器通过IP访问），则只允许客户登录
   if (isClientMode()) {
     return ['guest']; // 客户端只能登录客户
   }
